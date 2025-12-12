@@ -1,5 +1,4 @@
 // presentations/Screens/document_library.dart
-// ignore_for_file: unused_element
 
 import 'dart:io';
 import 'dart:convert';
@@ -7,11 +6,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:digi_sanchika/services/api_service.dart'; // Add this import
 import 'package:digi_sanchika/models/document.dart';
 import 'package:digi_sanchika/local_storage.dart';
 import 'package:digi_sanchika/services/document_library_service.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as path;
+import 'package:digi_sanchika/services/api_service.dart';
+import 'package:digi_sanchika/services/document_opener_service.dart';
 
 class DocumentLibrary extends StatefulWidget {
   const DocumentLibrary({super.key});
@@ -24,13 +25,17 @@ class _DocumentLibraryState extends State<DocumentLibrary>
     with WidgetsBindingObserver {
   final TextEditingController _searchController = TextEditingController();
   final DocumentLibraryService _libraryService = DocumentLibraryService();
+  final DocumentOpenerService _documentOpener = DocumentOpenerService();
 
   String _searchQuery = '';
   String _selectedFilter = 'All';
   List<Document> _publicDocuments = [];
+  List<Document> _filteredDocuments = [];
   bool _isDownloading = false;
   String? _downloadingFileName;
   bool _isLoading = true;
+  bool _hasError = false;
+  String _errorMessage = '';
 
   @override
   void initState() {
@@ -40,28 +45,85 @@ class _DocumentLibraryState extends State<DocumentLibrary>
   }
 
   Future<void> _loadPublicDocuments() async {
+    if (!mounted) return;
+
     setState(() {
       _isLoading = true;
+      _hasError = false;
+      _errorMessage = '';
     });
 
     try {
+      // Check internet connection - use ApiService instead
+      if (!ApiService.isConnected) {
+        // Load from local storage
+        _loadFromLocalStorage();
+        return;
+      }
+
+      // Try to load from backend first
       final documents = await _libraryService.fetchLibraryDocuments();
+
+      if (!mounted) return;
+
       setState(() {
         _publicDocuments = documents;
-      });
-    } catch (e) {
-      if (kDebugMode) {
-        print('Error loading library documents: $e');
-      }
-      // Fallback to local storage
-      final localDocs = await LocalStorageService.loadDocuments(isPublic: true);
-      setState(() {
-        _publicDocuments = localDocs;
-      });
-    } finally {
-      setState(() {
+        _filteredDocuments = documents;
         _isLoading = false;
       });
+
+      // Save to local storage for offline access
+      await _saveToLocalStorage();
+    } catch (e) {
+      if (!mounted) return;
+
+      debugPrint('Error loading library documents: $e');
+
+      // Try to load from local storage as fallback
+      _loadFromLocalStorage();
+    }
+  }
+
+  /// Load data from local storage
+  Future<void> _loadFromLocalStorage() async {
+    try {
+      final localDocs = await LocalStorageService.loadDocuments(isPublic: true);
+
+      if (mounted) {
+        setState(() {
+          _publicDocuments = localDocs;
+          _filteredDocuments = localDocs;
+          _hasError = true;
+          _errorMessage = 'Using cached data. No internet connection.';
+          _isLoading = false;
+        });
+      }
+    } catch (localError) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _errorMessage =
+              'Failed to load data. Please check your internet connection.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// Save data to local storage
+  Future<void> _saveToLocalStorage() async {
+    if (_publicDocuments.isNotEmpty) {
+      try {
+        await LocalStorageService.saveDocuments(
+          _publicDocuments,
+          isPublic: true,
+        );
+        debugPrint(
+          '✅ Saved ${_publicDocuments.length} documents to local storage',
+        );
+      } catch (e) {
+        debugPrint('❌ Error saving to local storage: $e');
+      }
     }
   }
 
@@ -83,18 +145,33 @@ class _DocumentLibraryState extends State<DocumentLibrary>
     }
   }
 
-  List<Document> get _filteredDocuments {
-    List<Document> filtered = _publicDocuments.where((doc) {
-      final query = _searchQuery.toLowerCase();
-      final docType = doc.type.toUpperCase();
+  /// Filter documents based on search query
+  void _filterDocuments(String query) {
+    if (query.isEmpty) {
+      setState(() {
+        _filteredDocuments = _publicDocuments;
+        _searchQuery = query;
+      });
+      return;
+    }
 
+    final lowercaseQuery = query.toLowerCase();
+    setState(() {
+      _searchQuery = query;
+      _filteredDocuments = _publicDocuments.where((doc) {
+        return doc.name.toLowerCase().contains(lowercaseQuery) ||
+            doc.keyword.toLowerCase().contains(lowercaseQuery) ||
+            doc.type.toLowerCase().contains(lowercaseQuery) ||
+            doc.owner.toLowerCase().contains(lowercaseQuery) ||
+            doc.folder.toLowerCase().contains(lowercaseQuery);
+      }).toList();
+    });
+  }
+
+  List<Document> get _finalFilteredDocuments {
+    List<Document> filtered = _filteredDocuments.where((doc) {
+      final docType = doc.type.toUpperCase();
       bool isExcelFile = docType == 'XLS' || docType == 'XLSX';
-      final matchesSearch =
-          doc.name.toLowerCase().contains(query) ||
-          doc.keyword.toLowerCase().contains(query) ||
-          doc.type.toLowerCase().contains(query) ||
-          doc.owner.toLowerCase().contains(query) ||
-          doc.folder.toLowerCase().contains(query);
 
       bool matchesFilter;
       if (_selectedFilter == 'All') {
@@ -106,7 +183,7 @@ class _DocumentLibraryState extends State<DocumentLibrary>
           _selectedFilter.toLowerCase(),
         );
       }
-      return matchesSearch && matchesFilter;
+      return matchesFilter;
     }).toList();
 
     // Sort by upload date (newest first)
@@ -127,41 +204,16 @@ class _DocumentLibraryState extends State<DocumentLibrary>
           if (_searchQuery.isNotEmpty || _selectedFilter != 'All')
             _buildFilterInfo(),
 
-          // Loading Indicator
-          if (_isLoading) _buildLoadingIndicator(),
+          // Loading/Downloading Banner
+          if (_isDownloading) _buildDownloadingBanner(),
 
           // Documents List
           Expanded(
             child: _isLoading
                 ? _buildLoadingState()
-                : _filteredDocuments.isEmpty
+                : _finalFilteredDocuments.isEmpty
                 ? _buildEmptyState()
                 : _buildDocumentsList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingIndicator() {
-    return const LinearProgressIndicator(
-      backgroundColor: Colors.grey,
-      valueColor: AlwaysStoppedAnimation<Color>(Colors.indigo),
-    );
-  }
-
-  Widget _buildLoadingState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.indigo),
-          ),
-          SizedBox(height: 16),
-          Text(
-            'Loading library documents...',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
           ),
         ],
       ),
@@ -180,11 +232,7 @@ class _DocumentLibraryState extends State<DocumentLibrary>
               Expanded(
                 child: TextField(
                   controller: _searchController,
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value;
-                    });
-                  },
+                  onChanged: _filterDocuments,
                   decoration: InputDecoration(
                     hintText: 'Search library documents...',
                     prefixIcon: const Icon(Icons.search, color: Colors.indigo),
@@ -192,10 +240,8 @@ class _DocumentLibraryState extends State<DocumentLibrary>
                         ? IconButton(
                             icon: const Icon(Icons.clear, color: Colors.grey),
                             onPressed: () {
-                              setState(() {
-                                _searchQuery = '';
-                                _searchController.clear();
-                              });
+                              _searchController.clear();
+                              _filterDocuments('');
                             },
                           )
                         : null,
@@ -232,9 +278,9 @@ class _DocumentLibraryState extends State<DocumentLibrary>
                 child: OutlinedButton.icon(
                   onPressed: () {
                     setState(() {
-                      _searchQuery = '';
-                      _selectedFilter = 'All';
                       _searchController.clear();
+                      _filterDocuments('');
+                      _selectedFilter = 'All';
                     });
                   },
                   icon: const Icon(Icons.folder_open, size: 18),
@@ -302,9 +348,9 @@ class _DocumentLibraryState extends State<DocumentLibrary>
           TextButton(
             onPressed: () {
               setState(() {
-                _searchQuery = '';
-                _selectedFilter = 'All';
                 _searchController.clear();
+                _filterDocuments('');
+                _selectedFilter = 'All';
               });
             },
             child: Text(
@@ -323,7 +369,7 @@ class _DocumentLibraryState extends State<DocumentLibrary>
 
   String _buildFilterText() {
     String text =
-        'Showing ${_filteredDocuments.length} of ${_publicDocuments.length} documents';
+        'Showing ${_finalFilteredDocuments.length} of ${_publicDocuments.length} documents';
 
     if (_searchQuery.isNotEmpty && _selectedFilter != 'All') {
       text += ' for "$_searchQuery" in $_selectedFilter';
@@ -337,128 +383,131 @@ class _DocumentLibraryState extends State<DocumentLibrary>
   }
 
   Widget _buildDocumentsList() {
-    return ListView.builder(
-      itemCount: _filteredDocuments.length,
-      padding: const EdgeInsets.all(16),
-      itemBuilder: (context, index) {
-        return _buildDocumentCard(_filteredDocuments[index], index);
-      },
+    return RefreshIndicator(
+      onRefresh: _loadPublicDocuments,
+      child: Column(
+        children: [
+          // Results count
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Text(
+                  '${_finalFilteredDocuments.length} document${_finalFilteredDocuments.length == 1 ? '' : 's'} found',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+
+          // Documents list
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.only(bottom: 20),
+              itemCount: _finalFilteredDocuments.length,
+              itemBuilder: (context, index) {
+                return _buildDocumentCard(
+                  _finalFilteredDocuments[index],
+                  index,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
+  // Build document item card (UPDATED: View button + Single-tap options + Versions button)
   Widget _buildDocumentCard(Document document, int index) {
-    final docIcons = {
-      'PDF': Icons.picture_as_pdf,
-      'DOCX': Icons.description,
-      'DOC': Icons.description,
-      'XLSX': Icons.table_chart,
-      'XLS': Icons.table_chart,
-      'PPTX': Icons.slideshow,
-      'PPT': Icons.slideshow,
-      'TXT': Icons.text_snippet,
-      'IMAGE': Icons.image,
-    };
-    final docColors = {
-      'PDF': Colors.red,
-      'DOCX': Colors.blue,
-      'DOC': Colors.blue,
-      'XLSX': Colors.green,
-      'XLS': Colors.green,
-      'PPTX': Colors.orange,
-      'PPT': Colors.orange,
-      'TXT': Colors.grey,
-      'IMAGE': Colors.purple,
-    };
+    final fileInfo = _getFileInfo(document.type);
 
-    String fileType = document.type.toUpperCase();
-    IconData icon = docIcons[fileType] ?? Icons.insert_drive_file;
-    Color color = docColors[fileType] ?? Colors.indigo;
-
-    return GestureDetector(
-      onDoubleTap: () => _handleDoubleTap(document),
-      child: Card(
-        margin: const EdgeInsets.only(bottom: 16),
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _handleDocumentDoubleTap(document),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Document Header
+              // Header row with icon and title
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GestureDetector(
-                    onTap: () => _previewDocument(document),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: color.withAlpha(10),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(icon, color: color, size: 32),
+                  // File type icon
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: fileInfo['color'].withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      fileInfo['icon'],
+                      color: fileInfo['color'],
+                      size: 32,
                     ),
                   ),
                   const SizedBox(width: 16),
+
+                  // Document info
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        GestureDetector(
-                          onTap: () => _previewDocument(document),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  document.name,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 4),
+                        // Document name
                         Text(
-                          '${document.size} • ${document.type}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
+                          document.name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            height: 1.3,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
+
+                        // Owner info
                         Row(
                           children: [
                             Icon(
                               Icons.person_outline,
-                              size: 12,
-                              color: Colors.grey,
+                              size: 14,
+                              color: Colors.grey.shade600,
                             ),
-                            const SizedBox(width: 4),
-                            Flexible(
+                            const SizedBox(width: 6),
+                            Expanded(
                               child: Text(
                                 'By: ${document.owner}',
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 13,
                                   color: Colors.grey.shade600,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 8),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+
+                        // Folder and classification
+                        Row(
+                          children: [
                             Icon(
                               Icons.folder_open,
-                              size: 12,
-                              color: Colors.grey,
+                              size: 14,
+                              color: Colors.grey.shade600,
                             ),
-                            const SizedBox(width: 4),
-                            Flexible(
+                            const SizedBox(width: 6),
+                            Expanded(
                               child: Text(
-                                document.folder,
+                                '${document.folder} • ${document.classification}',
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 13,
                                   color: Colors.grey.shade600,
                                 ),
                                 overflow: TextOverflow.ellipsis,
@@ -469,35 +518,150 @@ class _DocumentLibraryState extends State<DocumentLibrary>
                       ],
                     ),
                   ),
-                  // IconButton(
-                  //   onPressed: () => _showDeleteConfirmation(document, index),
-                  //   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                  //   tooltip: 'Delete Document',
-                  // ),
                 ],
               ),
-              const SizedBox(height: 12),
-              const Divider(height: 1),
+
               const SizedBox(height: 12),
 
-              // Document Details
-              _buildDetailRow('Keywords', document.keyword, Icons.label),
-              _buildDetailRow(
-                'Upload Date',
-                document.uploadDate,
-                Icons.calendar_today,
+              // File details row
+              Row(
+                children: [
+                  Icon(
+                    Icons.description,
+                    size: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${document.type.toUpperCase()} • ${_formatFileSize(document.size)}',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    Icons.calendar_today,
+                    size: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    document.uploadDate,
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                ],
               ),
-              _buildDetailRow(
-                'Classification',
-                document.classification,
-                Icons.security,
-              ),
-              if (document.details.isNotEmpty)
-                _buildDetailRow('Remarks', document.details, Icons.description),
-              const SizedBox(height: 16),
 
-              // Action Buttons
-              _buildActionButtons(document),
+              const SizedBox(height: 12),
+
+              // Keywords (if available)
+              if (document.keyword.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: document.keyword.split(',').map((keyword) {
+                      final trimmed = keyword.trim();
+                      if (trimmed.isEmpty) return const SizedBox.shrink();
+                      return InkWell(
+                        onTap: () => _searchByKeyword(trimmed),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Chip(
+                          label: Text(
+                            trimmed,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          backgroundColor: Colors.indigo.withAlpha(10),
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 0,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+              // Action buttons row (View + Versions + Download)
+              Row(
+                children: [
+                  // VIEW BUTTON with visibility icon
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _handleDocumentDoubleTap(document),
+                      icon: const Icon(Icons.visibility, size: 18),
+                      label: const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Text('View', style: TextStyle(fontSize: 12)),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.purple,
+                        side: const BorderSide(color: Colors.purple),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // VERSIONS BUTTON
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showDocumentVersions(document),
+                      icon: const Icon(Icons.history, size: 18),
+                      label: const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Text('Versions', style: TextStyle(fontSize: 12)),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        side: const BorderSide(color: Colors.blue),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // DISABLED DOWNLOAD BUTTON (with popup)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showDownloadRestrictedPopup(context),
+                      icon: Icon(
+                        Icons.download,
+                        size: 18,
+                        color: Colors.grey.shade300,
+                      ),
+                      label: Text(
+                        'Download',
+                        style: TextStyle(color: Colors.grey.shade300),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey.shade200,
+                        foregroundColor: Colors.grey.shade300,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              // Tap hint (updated)
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Tap card or click "View" button',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade500,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -505,102 +669,43 @@ class _DocumentLibraryState extends State<DocumentLibrary>
     );
   }
 
-  Widget _buildDetailRow(String label, String value, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 16, color: Colors.indigo),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-            ),
+  void _showDownloadRestrictedPopup(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.lock_outline, size: 48, color: Colors.orange),
+        title: const Text('Download Restricted'),
+        content: const Text(
+          'Download access is restricted for this library document. '
+          'Please contact the document owner or system administrator '
+          'to request download permissions.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActionButtons(Document document) {
-    return Row(
-      children: [
-        if (document.allowDownload)
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: _isDownloading && _downloadingFileName == document.name
-                  ? null
-                  : () => _downloadDocument(document),
-              icon: _isDownloading && _downloadingFileName == document.name
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.green),
-                      ),
-                    )
-                  : const Icon(Icons.download, size: 18),
-              label: _isDownloading && _downloadingFileName == document.name
-                  ? const Text('Downloading...')
-                  : const Text('Download'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.green,
-                side: const BorderSide(color: Colors.green),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-            ),
+  Widget _buildLoadingState() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.indigo),
           ),
-        if (!document.allowDownload) ...[
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () => _showDownloadRestricted(document),
-              icon: const Icon(Icons.block, size: 18),
-              label: const Text('Download Restricted'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.orange,
-                side: const BorderSide(color: Colors.orange),
-                padding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-            ),
+          SizedBox(height: 16),
+          Text(
+            'Loading library documents...',
+            style: TextStyle(fontSize: 16, color: Colors.grey),
           ),
         ],
-        const SizedBox(width: 8),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => _previewDocument(document),
-            icon: const Icon(Icons.visibility, size: 18),
-            label: const Text('Preview'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.blue,
-              side: const BorderSide(color: Colors.blue),
-              padding: const EdgeInsets.symmetric(vertical: 8),
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => _showDocumentVersions(document),
-            icon: const Icon(Icons.history, size: 18),
-            label: const Text('Versions'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.purple,
-              side: const BorderSide(color: Colors.purple),
-              padding: const EdgeInsets.symmetric(vertical: 8),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -626,24 +731,39 @@ class _DocumentLibraryState extends State<DocumentLibrary>
             ),
           ),
           const SizedBox(height: 10),
-          Text(
-            _searchQuery.isEmpty
-                ? 'No public documents available in the library yet'
-                : 'No documents found for "$_searchQuery"',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-            textAlign: TextAlign.center,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Text(
+              _hasError
+                  ? _errorMessage
+                  : _searchQuery.isEmpty
+                  ? 'No public documents available in the library yet'
+                  : 'No documents found for "$_searchQuery"',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
           ),
           const SizedBox(height: 20),
           if (_searchQuery.isNotEmpty)
             ElevatedButton.icon(
               onPressed: () {
                 setState(() {
-                  _searchQuery = '';
                   _searchController.clear();
+                  _filterDocuments('');
                 });
               },
               icon: const Icon(Icons.clear_all),
               label: const Text('Clear Search'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          if (_hasError)
+            ElevatedButton.icon(
+              onPressed: _loadPublicDocuments,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.indigo,
                 foregroundColor: Colors.white,
@@ -656,32 +776,31 @@ class _DocumentLibraryState extends State<DocumentLibrary>
 
   // ==================== ACTION METHODS ====================
 
-  // Handle double tap gesture
-  Future<void> _handleDoubleTap(Document document) async {
-    if (document.allowDownload) {
-      await _downloadDocument(document);
-    } else {
-      _previewDocument(document);
-    }
+  /// Handle document double-tap (same as SharedMeScreen)
+  void _handleDocumentDoubleTap(Document document) {
+    _documentOpener.handleDoubleTap(context: context, document: document);
   }
 
-  // Download document
+  // Search by keyword
+  void _searchByKeyword(String keyword) {
+    _searchController.text = keyword;
+    _filterDocuments(keyword);
+  }
+
+  /// Download a document (with auto-open like My Documents)
   Future<void> _downloadDocument(Document document) async {
     if (!document.allowDownload) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Download is not allowed for ${document.name}'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+      _showSnackBar('Download is not allowed for this document', Colors.orange);
+      return;
+    }
+
+    if (!ApiService.isConnected) {
+      _showSnackBar('Cannot download while offline', Colors.orange);
       return;
     }
 
     setState(() {
       _isDownloading = true;
-      _downloadingFileName = document.name;
     });
 
     try {
@@ -709,41 +828,54 @@ class _DocumentLibraryState extends State<DocumentLibrary>
         if (fileData is List<int>) {
           bytesToSave = fileData;
         } else if (fileData is List<dynamic>) {
+          // Convert List<dynamic> to List<int>
           bytesToSave = fileData.cast<int>();
         } else if (fileData is String) {
+          // Convert String to bytes
           bytesToSave = utf8.encode(fileData);
         } else {
-          throw Exception('Invalid file data format');
+          debugPrint(
+            '❌ fileData is not List<int>, it is: ${fileData.runtimeType}',
+          );
+          throw Exception(
+            'Invalid file data format. Expected List<int>, got ${fileData.runtimeType}',
+          );
         }
 
+        // Check if data is not empty
         if (bytesToSave.isEmpty) {
           throw Exception('Downloaded file data is empty (0 bytes)');
         }
 
         debugPrint('✅ Received ${bytesToSave.length} bytes of file data');
 
-        // Get directory
-        Directory directory;
-        if (Platform.isAndroid) {
-          directory = Directory('/storage/emulated/0/Download');
-          if (!directory.existsSync()) {
-            directory = await getApplicationDocumentsDirectory();
-          }
-        } else if (Platform.isIOS) {
-          directory = (await getDownloadsDirectory())!;
-        } else {
-          directory = await getApplicationDocumentsDirectory();
-        }
+        final directory = await getDownloadDirectory();
 
-        if (!directory.existsSync()) {
-          directory.createSync(recursive: true);
-        }
-
-        // Create filename
         String filename = document.name;
-        final extension = '.${document.type.toLowerCase()}';
-        if (!filename.toLowerCase().endsWith(extension.toLowerCase())) {
-          filename = '$filename$extension';
+
+        // Ensure correct file extension
+        final docName = document.name;
+        if (docName.isNotEmpty) {
+          final extension = path.extension(docName);
+          // If the filename doesn't have the same extension as the document name
+          if (!filename.toLowerCase().endsWith(extension.toLowerCase()) &&
+              extension.isNotEmpty) {
+            // Remove any existing extension from filename and add the correct one
+            final nameWithoutExt = path.withoutExtension(filename);
+            filename = '$nameWithoutExt$extension';
+          }
+        }
+
+        // Ensure .py files have correct extension
+        if (document.type.toLowerCase() == 'py' &&
+            !filename.toLowerCase().endsWith('.py')) {
+          filename = '$filename.py';
+        }
+
+        // Also check if we need to add .pdf extension
+        if (document.type.toLowerCase() == 'pdf' &&
+            !filename.toLowerCase().endsWith('.pdf')) {
+          filename = '$filename.pdf';
         }
 
         // Add timestamp to create unique filename
@@ -753,69 +885,73 @@ class _DocumentLibraryState extends State<DocumentLibrary>
         final uniqueFilename = '${nameWithoutExt}_$timestamp$ext';
 
         final filePath = '${directory.path}/$uniqueFilename';
+
         debugPrint('Saving to: $filePath');
 
         final file = File(filePath);
-
-        // // Check if file exists
-        // if (await file.exists()) {
-        //   bool shouldOverwrite = await _showOverwriteDialog(filename);
-        //   if (!shouldOverwrite) {
-        //     setState(() {
-        //       _isDownloading = false;
-        //       _downloadingFileName = null;
-        //     });
-        //     return;
-        //   }
-        // }
-
         await file.writeAsBytes(bytesToSave);
 
         if (await file.exists()) {
           final fileSize = await file.length();
-          // ignore: unnecessary_brace_in_string_interps
-          debugPrint('File saved: ${fileSize} bytes');
+          debugPrint('File saved: $fileSize bytes');
+          _showSnackBar('Downloaded: $filename', Colors.green);
 
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Downloaded: $filename'),
-                backgroundColor: Colors.green,
-              ),
+          if (document.size == '0' ||
+              document.size == '0 KB' ||
+              document.size == '0 B') {
+            final docIndex = _publicDocuments.indexWhere(
+              (d) => d.id == document.id,
             );
+            if (docIndex != -1) {
+              setState(() {
+                _publicDocuments[docIndex] = document.copyWith(
+                  size: fileSize.toString(),
+                );
+                _filteredDocuments = List.from(_publicDocuments);
+              });
+            }
           }
 
-          // Special handling for Python files
-          if (document.type.toLowerCase() == 'py') {
+          final fileExtension = filename.toLowerCase().split('.').last;
+          if (fileExtension == 'py' || document.type.toLowerCase() == 'py') {
             _showFileContent(bytesToSave, filename);
             return;
           }
 
-          // Auto-open the downloaded file
+          // Auto-open the downloaded file (same as My Documents)
           try {
-            final openResult = await OpenFilex.open(filePath);
+            final uriToOpen = Platform.isAndroid
+                ? _getFileProviderUri(filePath)
+                : filePath;
+
+            debugPrint('Opening with: $uriToOpen');
+
+            final openResult = await OpenFilex.open(uriToOpen);
 
             if (openResult.type != ResultType.done) {
               debugPrint('⚠ Could not open file: ${openResult.message}');
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Downloaded. Could not open automatically.'),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
+
+              // Fallback: Try normal path
+              if (Platform.isAndroid) {
+                try {
+                  await OpenFilex.open(filePath);
+                } catch (e) {
+                  debugPrint('⚠ Fallback also failed: $e');
+                }
               }
+              _showSnackBar(
+                'File downloaded. Could not open automatically.',
+                Colors.orange,
+              );
+            } else {
+              debugPrint('File opened successfully');
             }
           } catch (e) {
             debugPrint('⚠ Error opening file: $e');
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Downloaded. Use a compatible app to open it.'),
-                  backgroundColor: Colors.blue,
-                ),
-              );
-            }
+            _showSnackBar(
+              'File downloaded. Use a compatible app to open it.',
+              Colors.blue,
+            );
           }
         } else {
           throw Exception('Failed to save file to disk');
@@ -827,23 +963,41 @@ class _DocumentLibraryState extends State<DocumentLibrary>
       }
     } catch (e) {
       debugPrint('Download error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Download failed: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showSnackBar('Download failed: ${e.toString()}', Colors.red);
     } finally {
       setState(() {
         _isDownloading = false;
-        _downloadingFileName = null;
       });
     }
   }
 
-  // Helper method to show Python file content
+  /// Get download directory (same as My Documents)
+  Future<Directory> getDownloadDirectory() async {
+    if (Platform.isAndroid) {
+      return await getApplicationDocumentsDirectory();
+    } else if (Platform.isIOS) {
+      return await getApplicationDocumentsDirectory();
+    }
+    return Directory.current;
+  }
+
+  /// Get FileProvider URI for Android
+  String _getFileProviderUri(String filePath) {
+    if (Platform.isAndroid) {
+      try {
+        final file = File(filePath);
+        if (file.existsSync()) {
+          final fileName = file.path.split('/').last;
+          return 'content://com.example.digi_sanchika.fileprovider/files/$fileName';
+        }
+      } catch (e) {
+        debugPrint('Error creating FileProvider URI: $e');
+      }
+    }
+    return filePath;
+  }
+
+  /// Show text content of .py files
   void _showFileContent(List<int> fileBytes, String filename) {
     try {
       final content = utf8.decode(fileBytes);
@@ -853,7 +1007,7 @@ class _DocumentLibraryState extends State<DocumentLibrary>
         builder: (context) => AlertDialog(
           title: Row(
             children: [
-              Icon(_getDocumentIcon('py'), size: 24),
+              _getFileIcon('py', 24),
               const SizedBox(width: 12),
               Expanded(child: Text(filename, overflow: TextOverflow.ellipsis)),
             ],
@@ -912,15 +1066,9 @@ class _DocumentLibraryState extends State<DocumentLibrary>
             ),
             ElevatedButton.icon(
               onPressed: () {
+                // Copy to clipboard
                 Clipboard.setData(ClipboardData(text: content));
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Code copied to clipboard'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
+                _showSnackBar('Code copied to clipboard', Colors.green);
                 Navigator.pop(context);
               },
               icon: const Icon(Icons.copy, size: 18),
@@ -931,18 +1079,17 @@ class _DocumentLibraryState extends State<DocumentLibrary>
       );
     } catch (e) {
       debugPrint('Error showing file content: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Cannot display file content'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showSnackBar('Cannot display file content', Colors.red);
     }
   }
 
-  // Preview document
+  /// Show document details - Use existing preview instead since getDocumentDetails doesn't exist
+  Future<void> _showDocumentDetails(Document document) async {
+    // Since getDocumentDetails doesn't exist in DocumentLibraryService,
+    // use the existing preview functionality
+    _previewDocument(document);
+  }
+
   void _previewDocument(Document document) {
     showDialog(
       context: context,
@@ -1015,19 +1162,16 @@ class _DocumentLibraryState extends State<DocumentLibrary>
                 ),
                 const SizedBox(height: 12),
 
-                _buildPreviewDetailRow('File Name', document.name),
-                _buildPreviewDetailRow('File Type', document.type),
-                _buildPreviewDetailRow('File Size', document.size),
-                _buildPreviewDetailRow('Upload Date', document.uploadDate),
-                _buildPreviewDetailRow('Owner', document.owner),
-                _buildPreviewDetailRow(
-                  'Classification',
-                  document.classification,
-                ),
-                _buildPreviewDetailRow('Folder', document.folder),
-                _buildPreviewDetailRow('Keywords', document.keyword),
+                _buildDetailRow('File Name', document.name),
+                _buildDetailRow('File Type', document.type),
+                _buildDetailRow('File Size', document.size),
+                _buildDetailRow('Upload Date', document.uploadDate),
+                _buildDetailRow('Owner', document.owner),
+                _buildDetailRow('Classification', document.classification),
+                _buildDetailRow('Folder', document.folder),
+                _buildDetailRow('Keywords', document.keyword),
                 if (document.details.isNotEmpty)
-                  _buildPreviewDetailRow('Remarks', document.details),
+                  _buildDetailRow('Remarks', document.details),
               ],
             ),
           ),
@@ -1054,275 +1198,6 @@ class _DocumentLibraryState extends State<DocumentLibrary>
     );
   }
 
-  // Show document versions
-  void _showDocumentVersions(Document document) async {
-    final result = await _libraryService.getDocumentVersions(document.id);
-
-    if (result['success'] == true) {
-      final versions = result['versions'] as List;
-
-      showDialog(
-        // ignore: use_build_context_synchronously
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Document Versions'),
-          content: Container(
-            width: double.maxFinite,
-            constraints: const BoxConstraints(maxHeight: 400),
-            child: versions.isEmpty
-                ? const Center(child: Text('No version history available'))
-                : ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: versions.length,
-                    itemBuilder: (context, index) {
-                      final version = versions[index];
-                      return ListTile(
-                        leading: Icon(
-                          version['is_current'] == true
-                              ? Icons.check_circle
-                              : Icons.history,
-                          color: version['is_current'] == true
-                              ? Colors.green
-                              : Colors.grey,
-                        ),
-                        title: Text('Version ${version['version_number']}'),
-                        subtitle: Text(
-                          'Uploaded: ${_formatDate(version['upload_date'])}',
-                        ),
-                        trailing: version['is_current'] == true
-                            ? const Text(
-                                'Current',
-                                style: TextStyle(color: Colors.green),
-                              )
-                            : null,
-                      );
-                    },
-                  ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
-    } else {
-      // ignore: use_build_context_synchronously
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result['error'].toString()),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
-  }
-
-  // Show download restricted message
-  void _showDownloadRestricted(Document document) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.block, color: Colors.orange),
-            SizedBox(width: 8),
-            Text('Download Restricted'),
-          ],
-        ),
-        content: Text(
-          'Download is not allowed for "${document.name}" due to ${document.classification} classification.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Show delete confirmation
-  void _showDeleteConfirmation(Document document, int index) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.delete, color: Colors.red),
-            SizedBox(width: 8),
-            Text('Delete Document'),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to delete "${document.name}" from the library?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _deleteDocument(document, index);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Delete document
-  Future<void> _deleteDocument(Document document, int index) async {
-    try {
-      // Try to delete from backend
-      if (ApiService.isConnected) {
-        final result = await _libraryService.deleteDocument(document.id);
-
-        if (result['success'] == true) {
-          // Remove from local storage
-          await LocalStorageService.deleteDocument(
-            document.name,
-            isPublic: true,
-          );
-
-          // Update UI
-          if (mounted) {
-            setState(() {
-              _publicDocuments.removeWhere((doc) => doc.id == document.id);
-
-              _loadPublicDocuments();
-            });
-          }
-
-          // ignore: use_build_context_synchronously
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                result['message']?.toString() ??
-                    'Document deleted successfully',
-              ),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        } else {
-          throw Exception(result['error']?.toString() ?? 'Delete failed');
-        }
-      } else {
-        // If backend delete fails, still remove from local view
-        await LocalStorageService.deleteDocument(document.id, isPublic: true);
-
-        if (mounted) {
-          setState(() {
-            _publicDocuments.removeWhere((doc) => doc.id == document.id);
-          });
-        }
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Offline - Removed from local view'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Delete error: $e');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete: ${e.toString()}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
-  }
-
-  // // Helper: Show permission denied dialog
-  // Future<void> _showPermissionDeniedDialog() async {
-  //   await showDialog(
-  //     context: context,
-  //     builder: (context) => AlertDialog(
-  //       title: const Text('Storage Permission Required'),
-  //       content: Column(
-  //         mainAxisSize: MainAxisSize.min,
-  //         children: const [
-  //           Row(
-  //             crossAxisAlignment: CrossAxisAlignment.start,
-  //             children: [
-  //               Icon(Icons.warning, color: Colors.orange),
-  //               SizedBox(width: 12),
-  //               Expanded(
-  //                 child: Text(
-  //                   'Downloading files requires storage permission. '
-  //                   'Please grant the permission in app settings to continue.',
-  //                 ),
-  //               ),
-  //             ],
-  //           ),
-  //         ],
-  //       ),
-  //       actionsAlignment: MainAxisAlignment.end,
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.pop(context),
-  //           child: const Text('Cancel'),
-  //         ),
-  //         ElevatedButton(
-  //           onPressed: () {
-  //             Navigator.pop(context);
-  //             openAppSettings();
-  //           },
-  //           child: const Text('Open Settings'),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-
-  // // Helper: Show overwrite dialog
-  // Future<bool> _showOverwriteDialog(String fileName) async {
-  //   bool? result = await showDialog<bool>(
-  //     context: context,
-  //     builder: (context) => AlertDialog(
-  //       title: const Text('File Exists'),
-  //       content: Text(
-  //         '"$fileName" already exists. Do you want to overwrite it?',
-  //       ),
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.pop(context, false),
-  //           child: const Text('Cancel'),
-  //         ),
-  //         ElevatedButton(
-  //           onPressed: () => Navigator.pop(context, true),
-  //           style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-  //           child: const Text('Overwrite'),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  //   return result ?? false;
-  // }
-
-  // Helper: Format date
-  String _formatDate(dynamic date) {
-    try {
-      return DateTime.parse(date.toString()).toString().split(' ')[0];
-    } catch (e) {
-      return date.toString();
-    }
-  }
-
-  // Helper: Get document icon
   IconData _getDocumentIcon(String type) {
     switch (type.toUpperCase()) {
       case 'PDF':
@@ -1345,28 +1220,222 @@ class _DocumentLibraryState extends State<DocumentLibrary>
     }
   }
 
-  // Helper: Build preview detail row
-  Widget _buildPreviewDetailRow(String label, String value) {
+  Future<void> _showDocumentVersions(Document document) async {
+    if (!ApiService.isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot view versions while offline'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final result = await _libraryService.getDocumentVersions(document.id);
+
+      if (result['success'] == true) {
+        final versions = result['versions'] as List;
+
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Document Versions'),
+            content: Container(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: versions.length,
+                itemBuilder: (context, index) {
+                  final version = versions[index];
+                  return ListTile(
+                    leading: Icon(
+                      version['is_current']
+                          ? Icons.check_circle
+                          : Icons.history,
+                      color: version['is_current'] ? Colors.green : Colors.grey,
+                    ),
+                    title: Text('Version ${version['version_number']}'),
+                    subtitle: Text(
+                      'Uploaded: ${_formatDate(version['upload_date'])}',
+                    ),
+                    trailing: version['is_current']
+                        ? const Text(
+                            'Current',
+                            style: TextStyle(color: Colors.green),
+                          )
+                        : null,
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        throw Exception(result['error']);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load versions: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  String _formatDate(dynamic date) {
+    try {
+      return DateTime.parse(date.toString()).toString().split(' ')[0];
+    } catch (e) {
+      return date.toString();
+    }
+  }
+
+  Widget _buildDetailRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 100,
+            width: 120,
             child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+              '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
           ),
-          const SizedBox(width: 8),
           Expanded(
             child: Text(
-              value.isEmpty ? 'Not specified' : value,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              value,
+              style: const TextStyle(fontSize: 14),
+              softWrap: true,
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Get file icon based on type
+  Icon _getFileIcon(String type, double size) {
+    switch (type.toLowerCase()) {
+      case 'pdf':
+        return Icon(Icons.picture_as_pdf, color: Colors.red, size: size);
+      case 'docx':
+      case 'doc':
+        return Icon(Icons.description, color: Colors.blue, size: size);
+      case 'xlsx':
+      case 'xls':
+        return Icon(Icons.table_chart, color: Colors.green, size: size);
+      case 'pptx':
+      case 'ppt':
+        return Icon(Icons.slideshow, color: Colors.orange, size: size);
+      case 'image':
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icon(Icons.image, color: Colors.purple, size: size);
+      case 'txt':
+        return Icon(Icons.text_fields, color: Colors.grey, size: size);
+      case 'csv':
+        return Icon(
+          Icons.table_chart,
+          color: Colors.green.shade700,
+          size: size,
+        );
+      default:
+        return Icon(Icons.insert_drive_file, color: Colors.indigo, size: size);
+    }
+  }
+
+  /// Get file icon and color based on type
+  Map<String, dynamic> _getFileInfo(String type) {
+    switch (type.toLowerCase()) {
+      case 'pdf':
+        return {'icon': Icons.picture_as_pdf, 'color': Colors.red};
+      case 'docx':
+      case 'doc':
+        return {'icon': Icons.description, 'color': Colors.blue};
+      case 'xlsx':
+      case 'xls':
+        return {'icon': Icons.table_chart, 'color': Colors.green};
+      case 'pptx':
+      case 'ppt':
+        return {'icon': Icons.slideshow, 'color': Colors.orange};
+      case 'image':
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return {'icon': Icons.image, 'color': Colors.purple};
+      case 'txt':
+        return {'icon': Icons.text_fields, 'color': Colors.grey};
+      case 'csv':
+        return {'icon': Icons.table_chart, 'color': Colors.green.shade700};
+      default:
+        return {'icon': Icons.insert_drive_file, 'color': Colors.indigo};
+    }
+  }
+
+  /// Format file size
+  String _formatFileSize(String size) {
+    try {
+      final cleanSize = size.replaceAll(RegExp(r'[^0-9]'), '');
+      final bytes = int.tryParse(cleanSize) ?? 0;
+      if (bytes == 0) return '0 B';
+      if (bytes < 1024) return '$bytes B';
+      if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+      if (bytes < 1024 * 1024 * 1024) {
+        return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+      }
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    } catch (e) {
+      debugPrint('Error formatting file size: $e for input: $size');
+      return size;
+    }
+  }
+
+  /// Build downloading banner widget
+  Widget _buildDownloadingBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      color: Colors.green[50],
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Downloading document...',
+              style: TextStyle(
+                color: const Color.fromARGB(255, 57, 170, 57),
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show snackbar
+  void _showSnackBar(String message, Color backgroundColor) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: backgroundColor,
+        duration: const Duration(seconds: 2),
       ),
     );
   }

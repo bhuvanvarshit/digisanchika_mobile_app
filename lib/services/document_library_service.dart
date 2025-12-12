@@ -1,6 +1,6 @@
 // services/document_library_service.dart
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:digi_sanchika/models/document.dart';
 import 'package:digi_sanchika/services/api_service.dart';
@@ -35,15 +35,21 @@ class DocumentLibraryService {
 
         return documents;
       } else if (response.statusCode == 401) {
-        print('⚠ Authentication required for library documents');
+        if (kDebugMode) {
+          print('⚠ Authentication required for library documents');
+        }
         await ApiService.clearSessionCookie();
         return await LocalStorageService.loadDocuments(isPublic: true);
       } else {
-        print('⚠ Failed to fetch library documents: ${response.statusCode}');
+        if (kDebugMode) {
+          print('⚠ Failed to fetch library documents: ${response.statusCode}');
+        }
         return await LocalStorageService.loadDocuments(isPublic: true);
       }
     } catch (e) {
-      print('❌ Error fetching library documents: $e');
+      if (kDebugMode) {
+        print('❌ Error fetching library documents: $e');
+      }
       return await LocalStorageService.loadDocuments(isPublic: true);
     }
   }
@@ -183,6 +189,11 @@ class DocumentLibraryService {
   // Helper: Convert API response to Document list
   List<Document> _convertToDocumentList(List<dynamic> data) {
     return data.map((docJson) {
+      String fileType = _extractFileType(docJson['original_filename'] ?? '');
+
+      if (fileType == 'XLS' || fileType == 'XLSX') {
+        fileType = 'XLSX';
+      }
       return Document(
         id: docJson['id'].toString(),
         name: docJson['original_filename'] ?? 'Document',
@@ -195,7 +206,9 @@ class DocumentLibraryService {
         details: docJson['remarks'] ?? '',
         classification: docJson['doc_class'] ?? 'General',
         allowDownload: docJson['allow_download'] ?? true,
-        sharingType: 'Public', // Library documents are always public
+        sharingType: docJson['is_public'] == true
+            ? 'Public'
+            : 'Private', // Library documents are always public
         folder: docJson['folder_path'] ?? 'Home',
         folderId: docJson['folder_id']?.toString(),
         path: docJson['original_filename'] ?? '',
@@ -237,8 +250,9 @@ class DocumentLibraryService {
       final bytes = int.tryParse(size.toString()) ?? 0;
       if (bytes < 1024) return '$bytes B';
       if (bytes < 1048576) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-      if (bytes < 1073741824)
+      if (bytes < 1073741824) {
         return '${(bytes / 1048576).toStringAsFixed(1)} MB';
+      }
       return '${(bytes / 1073741824).toStringAsFixed(1)} GB';
     } catch (e) {
       return 'Unknown size';

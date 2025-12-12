@@ -33,9 +33,15 @@ class UploadService {
     String existingDocumentId = "",
   }) async {
     try {
-      print('📤 Starting single file upload...');
-      print('📄 File: ${file.path}');
-      print('📏 File size: ${file.lengthSync()} bytes');
+      if (kDebugMode) {
+        print('📤 Starting single file upload...');
+      }
+      if (kDebugMode) {
+        print('📄 File: ${file.path}');
+      }
+      if (kDebugMode) {
+        print('📏 File size: ${file.lengthSync()} bytes');
+      }
 
       // Check authentication
       final isAuthenticated = await _isAuthenticatedForUpload();
@@ -54,7 +60,9 @@ class UploadService {
       final sessionCookie = await _getSessionCookie();
       if (sessionCookie != null) {
         request.headers['Cookie'] = 'session_id=$sessionCookie';
-        print('🍪 Added session cookie to request');
+        if (kDebugMode) {
+          print('🍪 Added session cookie to request');
+        }
       }
 
       // Add the file
@@ -80,14 +88,20 @@ class UploadService {
       request.fields['is_new_version'] = isNewVersion;
       request.fields['existing_document_id'] = existingDocumentId;
 
-      print('📦 Request fields: ${request.fields}');
+      if (kDebugMode) {
+        print('📦 Request fields: ${request.fields}');
+      }
 
       // Send request
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
 
-      print('📡 Response status: ${response.statusCode}');
-      print('📦 Response body: $responseBody');
+      if (kDebugMode) {
+        print('📡 Response status: ${response.statusCode}');
+      }
+      if (kDebugMode) {
+        print('📦 Response body: $responseBody');
+      }
 
       if (response.statusCode == 200) {
         final responseData = json.decode(responseBody);
@@ -116,7 +130,9 @@ class UploadService {
         };
       }
     } catch (e) {
-      print('❌ Upload error: $e');
+      if (kDebugMode) {
+        print('❌ Upload error: $e');
+      }
       return {'success': false, 'message': 'Upload error: $e'};
     }
   }
@@ -134,8 +150,12 @@ class UploadService {
     bool preserveStructure = false,
   }) async {
     try {
-      print('📤 Starting multiple files upload...');
-      print('📦 Files count: ${files.length}');
+      if (kDebugMode) {
+        print('📤 Starting multiple files upload...');
+      }
+      if (kDebugMode) {
+        print('📦 Files count: ${files.length}');
+      }
 
       // Check authentication
       final isAuthenticated = await _isAuthenticatedForUpload();
@@ -154,7 +174,9 @@ class UploadService {
       final sessionCookie = await _getSessionCookie();
       if (sessionCookie != null) {
         request.headers['Cookie'] = 'session_id=$sessionCookie';
-        print('🍪 Added session cookie to request');
+        if (kDebugMode) {
+          print('🍪 Added session cookie to request');
+        }
       }
 
       // Add all files
@@ -169,7 +191,9 @@ class UploadService {
           contentType: MediaType('application', 'octet-stream'),
         );
         request.files.add(multipartFile);
-        print('➕ Added file: ${file.path.split('/').last}');
+        if (kDebugMode) {
+          print('➕ Added file: ${file.path.split('/').last}');
+        }
       }
 
       // Add form fields
@@ -182,14 +206,20 @@ class UploadService {
       request.fields['specific_users'] = specificUsers;
       request.fields['preserve_structure'] = preserveStructure.toString();
 
-      print('📦 Request fields: ${request.fields}');
+      if (kDebugMode) {
+        print('📦 Request fields: ${request.fields}');
+      }
 
       // Send request
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
 
-      print('📡 Response status: ${response.statusCode}');
-      print('📦 Response body: $responseBody');
+      if (kDebugMode) {
+        print('📡 Response status: ${response.statusCode}');
+      }
+      if (kDebugMode) {
+        print('📦 Response body: $responseBody');
+      }
 
       if (response.statusCode == 200) {
         final responseData = json.decode(responseBody);
@@ -219,7 +249,9 @@ class UploadService {
         };
       }
     } catch (e) {
-      print('❌ Multiple upload error: $e');
+      if (kDebugMode) {
+        print('❌ Multiple upload error: $e');
+      }
       return {'success': false, 'message': 'Upload error: $e'};
     }
   }
@@ -237,8 +269,12 @@ class UploadService {
     String specificUsers = "[]",
   }) async {
     try {
-      print('📤 Starting folder upload: $folderName');
-      print('📦 Files count: ${files.length}');
+      if (kDebugMode) {
+        print('📤 Starting folder upload: $folderName');
+      }
+      if (kDebugMode) {
+        print('📦 Files count: ${files.length}');
+      }
 
       // Check authentication
       final isAuthenticated = await _isAuthenticatedForUpload();
@@ -264,7 +300,9 @@ class UploadService {
       }
 
       final newFolderId = folderResult['folderId']?.toString() ?? '';
-      print('✅ Created folder with ID: $newFolderId');
+      if (kDebugMode) {
+        print('✅ Created folder with ID: $newFolderId');
+      }
 
       // Step 2: Upload files to the new folder
       final uploadResult = await uploadMultipleFiles(
@@ -287,7 +325,9 @@ class UploadService {
         'failed_files': uploadResult['failed_files'] ?? [],
       };
     } catch (e) {
-      print('❌ Folder upload error: $e');
+      if (kDebugMode) {
+        print('❌ Folder upload error: $e');
+      }
       return {'success': false, 'message': 'Folder upload error: $e'};
     }
   }
@@ -298,7 +338,9 @@ class UploadService {
     required String parentFolderId,
   }) async {
     try {
-      print('📁 Creating folder: $folderName (Parent: $parentFolderId)');
+      if (kDebugMode) {
+        print('📁 Creating folder: $folderName (Parent: $parentFolderId)');
+      }
 
       final headers = await _getAuthHeaders();
       final url = Uri.parse('$_baseUrl/folders');
@@ -312,8 +354,12 @@ class UploadService {
         },
       );
 
-      print('📡 Create folder response: ${response.statusCode}');
-      print('📦 Response body: ${response.body}');
+      if (kDebugMode) {
+        print('📡 Create folder response: ${response.statusCode}');
+      }
+      if (kDebugMode) {
+        print('📦 Response body: ${response.body}');
+      }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -336,7 +382,9 @@ class UploadService {
         };
       }
     } catch (e) {
-      print('❌ Create folder error: $e');
+      if (kDebugMode) {
+        print('❌ Create folder error: $e');
+      }
       return {'success': false, 'message': 'Create folder error: $e'};
     }
   }
@@ -344,7 +392,9 @@ class UploadService {
   // ============ TEST UPLOAD CONNECTION ============
   static Future<Map<String, dynamic>> testUploadConnection() async {
     try {
-      print('🧪 Testing upload connection...');
+      if (kDebugMode) {
+        print('🧪 Testing upload connection...');
+      }
 
       // Check authentication first
       final isAuthenticated = await _isAuthenticatedForUpload();
@@ -367,7 +417,9 @@ class UploadService {
       final sessionCookie = await _getSessionCookie();
       if (sessionCookie != null) {
         request.headers['Cookie'] = 'session_id=$sessionCookie';
-        print('🍪 Added session cookie to request');
+        if (kDebugMode) {
+          print('🍪 Added session cookie to request');
+        }
       }
 
       // Add dummy file
@@ -394,12 +446,15 @@ class UploadService {
       request.fields['existing_document_id'] = '';
 
       final response = await request.send();
+      // ignore: unused_local_variable
       final responseBody = await response.stream.bytesToString();
 
       // Clean up temp file
       await tempFile.delete();
 
-      print('📡 Test response status: ${response.statusCode}');
+      if (kDebugMode) {
+        print('📡 Test response status: ${response.statusCode}');
+      }
 
       if (response.statusCode == 200) {
         return {
@@ -423,7 +478,9 @@ class UploadService {
         };
       }
     } catch (e) {
-      print('❌ Test upload error: $e');
+      if (kDebugMode) {
+        print('❌ Test upload error: $e');
+      }
       return {'success': false, 'message': 'Test failed: $e'};
     }
   }

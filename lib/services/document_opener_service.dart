@@ -1,6 +1,7 @@
 // lib/services/document_opener_service.dart
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path; // Fixed import
 import 'package:path_provider/path_provider.dart';
@@ -89,7 +90,9 @@ class DocumentOpenerService {
       }
       return null;
     } catch (e) {
-      print('Download error: $e');
+      if (kDebugMode) {
+        print('Download error: $e');
+      }
       return null;
     }
   }

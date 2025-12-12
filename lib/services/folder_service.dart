@@ -1,5 +1,6 @@
 // services/folder_service.dart
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:digi_sanchika/services/api_service.dart';
 import 'package:digi_sanchika/models/folder.dart';
@@ -69,7 +70,9 @@ class FolderService {
         };
       }
     } catch (e) {
-      print('❌ Error getting folder contents: $e');
+      if (kDebugMode) {
+        print('❌ Error getting folder contents: $e');
+      }
     }
     return {'success': false, 'error': 'Failed to load folder contents'};
   }
@@ -107,7 +110,9 @@ class FolderService {
         };
       }
     } catch (e) {
-      print('❌ Error getting folder tree: $e');
+      if (kDebugMode) {
+        print('❌ Error getting folder tree: $e');
+      }
     }
     return {'success': false, 'error': 'Failed to load folder tree'};
   }
@@ -160,7 +165,9 @@ class FolderService {
         headers['Cookie'] = 'session_id=$cookie';
       }
     } catch (e) {
-      print('⚠ Could not get session cookie: $e');
+      if (kDebugMode) {
+        print('⚠ Could not get session cookie: $e');
+      }
     }
 
     return headers;
@@ -168,6 +175,6 @@ class FolderService {
 
   static Future<String?> _getSessionCookie() async {
     // Get from your existing auth system
-    return ApiService.getSessionCookie?.call();
+    return ApiService.getSessionCookie.call();
   }
 }

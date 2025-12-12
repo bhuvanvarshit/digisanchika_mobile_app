@@ -12,7 +12,7 @@ class DocumentCard extends StatelessWidget {
   final VoidCallback onViewDetails;
 
   const DocumentCard({
-    Key? key,
+    super.key,
     required this.document,
     required this.index,
     required this.onDownload,
@@ -20,7 +20,7 @@ class DocumentCard extends StatelessWidget {
     required this.onShare,
     required this.onDelete,
     required this.onViewDetails,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

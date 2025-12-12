@@ -17,6 +17,8 @@ import 'package:open_filex/open_filex.dart';
 import 'package:digi_sanchika/presentations/Screens/folder_screen.dart';
 import 'package:digi_sanchika/services/document_opener_service.dart';
 import 'package:digi_sanchika/presentations/Screens/shared_folder_screen.dart';
+import 'package:digi_sanchika/services/api_service.dart';
+import 'package:digi_sanchika/services/my_documents_service.dart';
 
 // Add this import at the top
 import 'package:digi_sanchika/services/shared_folders_service.dart';
@@ -618,78 +620,81 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     }
   }
 
-  /// Show document versions
   Future<void> _showDocumentVersions(Document document) async {
-    final result = await _sharedService.getDocumentVersions(document.id);
-
-    if (result['success'] == true && result['data'] != null) {
-      final data = result['data'] as Map<String, dynamic>;
-      final versions = data['versions'] as List<dynamic>;
-
-      showDialog(
-        // ignore: use_build_context_synchronously
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Document Versions'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: MediaQuery.of(context).size.height * 0.6,
-            child: ListView.builder(
-              itemCount: versions.length,
-              itemBuilder: (context, index) {
-                final version = versions[index];
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 4),
-                  color: version['is_current'] == true
-                      ? Colors.blue.shade50
-                      : null,
-                  child: ListTile(
-                    leading: Icon(
-                      version['is_current'] == true
-                          ? Icons.star
-                          : Icons.history,
-                      color: version['is_current'] == true
-                          ? Colors.amber
-                          : Colors.grey,
-                    ),
-                    title: Text(
-                      'Version ${version['version_number']}',
-                      style: TextStyle(
-                        fontWeight: version['is_current'] == true
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Date: ${_formatDate(version['upload_date'])}'),
-                        if (version['keywords']?.toString().isNotEmpty == true)
-                          Text('Keywords: ${version['keywords']}'),
-                        if (version['remarks']?.toString().isNotEmpty == true)
-                          Text('Remarks: ${version['remarks']}'),
-                        Text('Class: ${version['doc_class']}'),
-                      ],
-                    ),
-                    trailing: version['is_current'] == true
-                        ? const Chip(
-                            label: Text('Current'),
-                            backgroundColor: Colors.amber,
-                          )
-                        : null,
-                  ),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-          ],
+    if (!ApiService.isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot view versions while offline'),
+          backgroundColor: Colors.orange,
         ),
       );
+      return;
+    }
+
+    try {
+      final result = await MyDocumentsService.getDocumentVersions(document.id);
+
+      if (result['success'] == true) {
+        final versions = result['versions'] as List;
+
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Document Versions'),
+            content: Container(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: versions.length,
+                itemBuilder: (context, index) {
+                  final version = versions[index];
+                  return ListTile(
+                    leading: Icon(
+                      version['is_current']
+                          ? Icons.check_circle
+                          : Icons.history,
+                      color: version['is_current'] ? Colors.green : Colors.grey,
+                    ),
+                    title: Text('Version ${version['version_number']}'),
+                    subtitle: Text(
+                      'Uploaded: ${_formatDate(version['upload_date'])}',
+                    ),
+                    trailing: version['is_current']
+                        ? const Text(
+                            'Current',
+                            style: TextStyle(color: Colors.green),
+                          )
+                        : null,
+                  );
+                },
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        throw Exception(result['error']);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load versions: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  String _formatDate(dynamic date) {
+    try {
+      return DateTime.parse(date.toString()).toString().split(' ')[0];
+    } catch (e) {
+      return date.toString();
     }
   }
 
@@ -817,7 +822,9 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     );
   }
 
-  /// Build document item card (UPDATED: Single Download button + Double-tap)
+  /// Build document item card (UPDATED: View button + Single-tap options + Versions button)
+  /// Build document item card (UPDATED: View button + Single-tap options + Versions button)
+  /// Build document item card (UPDATED: View button + Single-tap options + Versions button)
   Widget _buildDocumentCard(Document document, int index) {
     final fileInfo = _getFileInfo(document.type);
 
@@ -827,8 +834,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _showDocumentDetails(document),
-        onDoubleTap: () => _handleDocumentDoubleTap(document),
+        onTap: () => _handleDocumentDoubleTap(document),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -978,50 +984,51 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                   ),
                 ),
 
-              // Action buttons (ONLY DOWNLOAD BUTTON)
-              // Row(
-              //   children: [
-              //     // Single Download button (full width)
-              //     Expanded(
-              //       child: ElevatedButton.icon(
-              //         onPressed: () => _downloadDocument(document),
-              //         icon: Icon(
-              //           Icons.download,
-              //           size: 18,
-              //           color: document.allowDownload
-              //               ? Colors.white
-              //               : Colors.grey.shade300,
-              //         ),
-              //         label: Text(
-              //           document.allowDownload ? 'Download' : 'Not Allowed',
-              //           style: TextStyle(
-              //             color: document.allowDownload
-              //                 ? Colors.white
-              //                 : Colors.grey.shade300,
-              //           ),
-              //         ),
-              //         style: ElevatedButton.styleFrom(
-              //           backgroundColor: document.allowDownload
-              //               ? Colors.green
-              //               : Colors.grey.shade400,
-              //           foregroundColor: Colors.white,
-              //           padding: const EdgeInsets.symmetric(vertical: 12),
-              //           shape: RoundedRectangleBorder(
-              //             borderRadius: BorderRadius.circular(8),
-              //           ),
-              //         ),
-              //       ),
-              //     ),
-              //   ],
-              // ),
-
-              // Action buttons (DISABLED DOWNLOAD BUTTON)
+              // Action buttons row (View + Versions + Download)
               Row(
                 children: [
-                  // Single Download button (DISABLED)
+                  // VIEW BUTTON with visibility icon
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _handleDocumentDoubleTap(document),
+                      icon: const Icon(Icons.visibility, size: 18),
+                      label: const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Text('View', style: TextStyle(fontSize: 12)),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.purple,
+                        side: const BorderSide(color: Colors.purple),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // VERSIONS BUTTON
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showDocumentVersions(document),
+                      icon: const Icon(Icons.history, size: 18),
+                      label: const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Text('Versions', style: TextStyle(fontSize: 12)),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        side: const BorderSide(color: Colors.blue),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // DISABLED DOWNLOAD BUTTON (with popup)
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: null, // Disabled
+                      onPressed: () => _showDownloadRestrictedPopup(context),
                       icon: Icon(
                         Icons.download,
                         size: 18,
@@ -1044,12 +1051,12 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                 ],
               ),
 
-              // Double-tap hint
+              // Tap hint (updated)
               const SizedBox(height: 8),
               Align(
                 alignment: Alignment.centerRight,
                 child: Text(
-                  'Double-tap to open options',
+                  'Tap card or click "View" button',
                   style: TextStyle(
                     fontSize: 10,
                     color: Colors.grey.shade500,
@@ -1060,6 +1067,28 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showDownloadRestrictedPopup(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.lock_outline, size: 48, color: Colors.orange),
+        title: const Text('Download Restricted'),
+        content: const Text(
+          'Download access is restricted for this shared document. '
+          'Please contact the document owner or system administrator '
+          'to request download permissions.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }
@@ -1142,18 +1171,18 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     }
   }
 
-  /// Format date
-  String _formatDate(dynamic date) {
-    if (date == null) return 'Unknown';
-    try {
-      final dateTime = DateTime.parse(date.toString());
-      return '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';
-    } catch (e) {
-      final dateStr = date.toString();
-      if (dateStr.contains('/')) return dateStr;
-      return dateStr;
-    }
-  }
+  // /// Format date
+  // String _formatDate(dynamic date) {
+  //   if (date == null) return 'Unknown';
+  //   try {
+  //     final dateTime = DateTime.parse(date.toString());
+  //     return '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';
+  //   } catch (e) {
+  //     final dateStr = date.toString();
+  //     if (dateStr.contains('/')) return dateStr;
+  //     return dateStr;
+  //   }
+  // }
 
   /// Build empty state widget
   Widget _buildEmptyState() {

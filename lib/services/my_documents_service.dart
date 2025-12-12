@@ -184,7 +184,7 @@ class MyDocumentsService {
           'filename':
               response.headers['content-disposition']
                   ?.split('filename=')[1]
-                  ?.replaceAll('"', '') ??
+                  .replaceAll('"', '') ??
               'document',
         };
       } else if (response.statusCode == 401) {
@@ -526,6 +526,7 @@ class MyDocumentsService {
         } else {
           return '$sizeInBytes B';
         }
+        // ignore: empty_catches
       } catch (e) {}
     }
     return 'Unknown Size';

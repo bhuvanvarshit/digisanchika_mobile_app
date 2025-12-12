@@ -1,4 +1,7 @@
 // lib/presentations/screens/document_open_options.dart
+// ignore_for_file: unused_element
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:digi_sanchika/models/document.dart';
 import 'package:digi_sanchika/presentations/screens/document_preview_screen.dart';
@@ -23,9 +26,6 @@ class DocumentOpenOptionsDialog extends StatefulWidget {
 }
 
 class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
-  bool _downloading = false;
-  bool _isOpening = false;
-
   @override
   Widget build(BuildContext context) {
     final isPdf = widget.fileType.toUpperCase() == 'PDF';
@@ -207,8 +207,12 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
   }
 
   Future<void> _openExternalApp(BuildContext context) async {
-    print('🟢 Opening external app for: ${widget.document.name}');
-    print('📄 File type: ${widget.fileType}');
+    if (kDebugMode) {
+      print('🟢 Opening external app for: ${widget.document.name}');
+    }
+    if (kDebugMode) {
+      print('📄 File type: ${widget.fileType}');
+    }
 
     // Close dialog immediately
     Navigator.pop(context);
@@ -224,14 +228,18 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
 
     try {
       // 1. First, try to download the file from backend
-      print('📥 Downloading file from backend...');
+      if (kDebugMode) {
+        print('📥 Downloading file from backend...');
+      }
       final downloadResult = await MyDocumentsService.downloadDocument(
         widget.document.id,
       );
 
       if (downloadResult['success'] == true && downloadResult['data'] != null) {
         final bytes = downloadResult['data'] as List<int>;
-        print('✅ Downloaded ${bytes.length} bytes');
+        if (kDebugMode) {
+          print('✅ Downloaded ${bytes.length} bytes');
+        }
 
         // 2. Save to a proper location with correct filename
         final tempDir = await getTemporaryDirectory();
@@ -251,7 +259,9 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
         );
         final filePath = '${downloadsDir.path}/$safeFilename';
 
-        print('💾 Saving to: $filePath');
+        if (kDebugMode) {
+          print('💾 Saving to: $filePath');
+        }
 
         // 3. Write file AS BINARY (not text!)
         await File(filePath).writeAsBytes(bytes);
@@ -261,17 +271,24 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
         final exists = await savedFile.exists();
         final fileSize = await savedFile.length();
 
-        print('📊 File saved - Exists: $exists, Size: $fileSize bytes');
+        if (kDebugMode) {
+          print('📊 File saved - Exists: $exists, Size: $fileSize bytes');
+        }
 
         if (exists && fileSize > 0) {
           // 5. Open with open_filex
-          print('🚀 Opening with OpenFilex...');
+          if (kDebugMode) {
+            print('🚀 Opening with OpenFilex...');
+          }
           final result = await OpenFilex.open(filePath);
-          print(
-            '📱 OpenFilex result: ${result.type}, Message: ${result.message}',
-          );
+          if (kDebugMode) {
+            print(
+              '📱 OpenFilex result: ${result.type}, Message: ${result.message}',
+            );
+          }
 
           if (result.type == ResultType.done) {
+            // ignore: use_build_context_synchronously
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('File opened successfully'),
@@ -280,6 +297,7 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
               ),
             );
           } else if (result.type == ResultType.noAppToOpen) {
+            // ignore: use_build_context_synchronously
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: const Text('No app found to open this file'),
@@ -293,6 +311,7 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
               ),
             );
           } else {
+            // ignore: use_build_context_synchronously
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Error: ${result.message}'),
@@ -302,7 +321,10 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
             );
           }
         } else {
-          print('❌ File not saved properly');
+          if (kDebugMode) {
+            print('❌ File not saved properly');
+          }
+          // ignore: use_build_context_synchronously
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Failed to save file'),
@@ -312,7 +334,10 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
           );
         }
       } else {
-        print('❌ Download failed: ${downloadResult['error']}');
+        if (kDebugMode) {
+          print('❌ Download failed: ${downloadResult['error']}');
+        }
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Download failed: ${downloadResult['error']}'),
@@ -322,7 +347,10 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
         );
       }
     } catch (e) {
-      print('❌ Error: $e');
+      if (kDebugMode) {
+        print('❌ Error: $e');
+      }
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error: $e'),
@@ -345,6 +373,7 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
         final filePath = '${downloadsDir.path}/$filename';
         await File(filePath).writeAsBytes(bytes);
 
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('File saved to Downloads: $filename'),
@@ -354,6 +383,7 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
         );
       }
     } catch (e) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to save: $e'),
@@ -383,7 +413,9 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
           '${safeName}_$timestamp.${_getFileExtension(widget.fileType)}';
       final filePath = '${testDir.path}/$fileName';
 
-      print('📝 Creating test file: $filePath');
+      if (kDebugMode) {
+        print('📝 Creating test file: $filePath');
+      }
 
       // Create file content based on file type
       final content = _generateFileContent(
@@ -393,10 +425,14 @@ class _DocumentOpenOptionsDialogState extends State<DocumentOpenOptionsDialog> {
 
       await File(filePath).writeAsString(content);
 
-      print('✅ File created successfully: $filePath');
+      if (kDebugMode) {
+        print('✅ File created successfully: $filePath');
+      }
       return filePath;
     } catch (e) {
-      print('❌ Error creating test file: $e');
+      if (kDebugMode) {
+        print('❌ Error creating test file: $e');
+      }
       return null;
     }
   }
@@ -504,9 +540,7 @@ You can open this file with appropriate applications on your device.''';
   }
 
   Future<void> _downloadFile(BuildContext context) async {
-    setState(() {
-      _downloading = true;
-    });
+    setState(() {});
 
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -519,6 +553,7 @@ You can open this file with appropriate applications on your device.''';
       await Future.delayed(const Duration(seconds: 2));
 
       if (mounted) {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('File downloaded successfully'),
@@ -529,6 +564,7 @@ You can open this file with appropriate applications on your device.''';
       }
     } catch (e) {
       if (mounted) {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Download failed: $e'),
@@ -539,17 +575,13 @@ You can open this file with appropriate applications on your device.''';
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _downloading = false;
-        });
+        setState(() {});
       }
     }
   }
 
   @override
   void dispose() {
-    _isOpening = false;
-    _downloading = false;
     super.dispose();
   }
 }

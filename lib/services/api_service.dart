@@ -138,9 +138,15 @@ class ApiService {
     String password,
   ) async {
     try {
-      print('🔐 Login API: $_currentBaseUrl/login');
-      print('👤 Employee ID: $employeeId');
-      print('🔑 Password: $password');
+      if (kDebugMode) {
+        print('🔐 Login API: $_currentBaseUrl/login');
+      }
+      if (kDebugMode) {
+        print('👤 Employee ID: $employeeId');
+      }
+      if (kDebugMode) {
+        print('🔑 Password: $password');
+      }
 
       final url = Uri.parse('$_currentBaseUrl/login');
       final headers = {
@@ -150,23 +156,33 @@ class ApiService {
 
       final body =
           'employee_id=${Uri.encodeComponent(employeeId)}&password=${Uri.encodeComponent(password)}';
-      print('📦 Form Body: $body');
+      if (kDebugMode) {
+        print('📦 Form Body: $body');
+      }
 
       final response = await http
           .post(url, headers: headers, body: body)
           .timeout(const Duration(seconds: 10));
 
-      print('📡 Status Code: ${response.statusCode}');
-      print('📦 Response Body: ${response.body}');
+      if (kDebugMode) {
+        print('📡 Status Code: ${response.statusCode}');
+      }
+      if (kDebugMode) {
+        print('📦 Response Body: ${response.body}');
+      }
 
       // Check for session cookie
       final cookies = response.headers['set-cookie'];
       if (cookies != null) {
-        print('🍪 Session cookie received: $cookies');
+        if (kDebugMode) {
+          print('🍪 Session cookie received: $cookies');
+        }
         // Store the cookie for future authenticated requests
         await storeSessionCookie(cookies);
       } else {
-        print('⚠ No session cookie received from server');
+        if (kDebugMode) {
+          print('⚠ No session cookie received from server');
+        }
       }
 
       if (response.statusCode == 200) {
@@ -195,19 +211,25 @@ class ApiService {
         };
       }
     } on TimeoutException {
-      print('⏰ Request timeout');
+      if (kDebugMode) {
+        print('⏰ Request timeout');
+      }
       return {
         'success': false,
         'message': 'Connection timeout. Please try again.',
       };
     } on SocketException {
-      print('🌐 Network error');
+      if (kDebugMode) {
+        print('🌐 Network error');
+      }
       return {
         'success': false,
         'message': 'Network error. Check your internet connection.',
       };
     } catch (e) {
-      print('❌ Error: $e');
+      if (kDebugMode) {
+        print('❌ Error: $e');
+      }
       return {'success': false, 'message': 'Error: $e'};
     }
   }
@@ -253,7 +275,9 @@ class ApiService {
       final headers = await _getHeaders(includeAuth: true);
 
       final response = await http.get(url, headers: headers);
-      print('📡 Fetch documents status: ${response.statusCode}');
+      if (kDebugMode) {
+        print('📡 Fetch documents status: ${response.statusCode}');
+      }
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = json.decode(response.body);
@@ -318,7 +342,9 @@ class ApiService {
           }
         }
       } else if (response.statusCode == 401) {
-        print('⚠ Authentication required for fetching documents');
+        if (kDebugMode) {
+          print('⚠ Authentication required for fetching documents');
+        }
         // Clear invalid session cookie
         await clearSessionCookie();
       }
@@ -335,11 +361,15 @@ class ApiService {
 
   static Future<List<Map<String, dynamic>>> getMyFolders() async {
     try {
-      print('📁 Fetching user folders...');
+      if (kDebugMode) {
+        print('📁 Fetching user folders...');
+      }
 
       if (!_isConnected) {
         // Return empty list if offline
-        print('⚠ Offline - cannot fetch folders');
+        if (kDebugMode) {
+          print('⚠ Offline - cannot fetch folders');
+        }
         return [];
       }
 
@@ -348,25 +378,35 @@ class ApiService {
 
       final response = await http.get(url, headers: headers);
 
-      print('📡 Get folders status: ${response.statusCode}');
+      if (kDebugMode) {
+        print('📡 Get folders status: ${response.statusCode}');
+      }
 
       if (response.statusCode == 200) {
         final List<dynamic> responseData = json.decode(response.body);
-        print('📁 Found ${responseData.length} folders');
+        if (kDebugMode) {
+          print('📁 Found ${responseData.length} folders');
+        }
 
         // Convert to List<Map<String, dynamic>>
         return List<Map<String, dynamic>>.from(responseData);
       } else if (response.statusCode == 401) {
         // Authentication error
-        print('⚠ Authentication required for folders');
+        if (kDebugMode) {
+          print('⚠ Authentication required for folders');
+        }
         await clearSessionCookie();
         return [];
       } else {
-        print('⚠ Failed to fetch folders: ${response.statusCode}');
+        if (kDebugMode) {
+          print('⚠ Failed to fetch folders: ${response.statusCode}');
+        }
         return [];
       }
     } catch (e) {
-      print('❌ Error fetching folders: $e');
+      if (kDebugMode) {
+        print('❌ Error fetching folders: $e');
+      }
       return [];
     }
   }

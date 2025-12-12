@@ -4,6 +4,7 @@ import 'package:digi_sanchika/services/api_service.dart';
 import 'package:digi_sanchika/utils/connection_test.dart';
 
 class DebugScreen extends StatefulWidget {
+  // ignore: use_super_parameters
   const DebugScreen({Key? key}) : super(key: key);
 
   @override

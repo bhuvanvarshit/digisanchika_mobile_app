@@ -1,5 +1,5 @@
 // screens/shared_folder_screen.dart
-// import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:digi_sanchika/services/shared_browse_service.dart';
 import 'package:digi_sanchika/models/document.dart';
@@ -8,13 +8,9 @@ import 'package:digi_sanchika/services/document_opener_service.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:digi_sanchika/services/shared_documents_service.dart';
-// import 'package:path/path.dart' as path;
+import 'package:path/path.dart' as path;
 import 'dart:io';
-// ADD THESE IMPORTS to match shared_me.dart
-import 'dart:convert'; // For utf8.encode
-import 'package:path/path.dart'
-    as path; // For path.extension, path.withoutExtension
-import 'package:flutter/services.dart'; // For Clipboard
+import 'package:flutter/services.dart';
 
 class SharedFolderScreen extends StatefulWidget {
   final String? folderId;
@@ -38,13 +34,11 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
 
   bool _isLoading = true;
   bool _hasError = false;
-  bool _isDownloading = false; // ADDED: Downloading state
+  bool _isDownloading = false;
   String _errorMessage = '';
 
   final TextEditingController _searchController = TextEditingController();
   final DocumentOpenerService _documentOpener = DocumentOpenerService();
-
-  // ADDED: Download-related variables from shared_me.dart
   final SharedDocumentsService _sharedService = SharedDocumentsService();
 
   @override
@@ -110,14 +104,13 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
   }
 
   void _goBack() {
-    // Simply pop to go back to previous screen
     Navigator.pop(context);
   }
 
-  // UPDATED: Now uses same download function as shared_me.dart
+  // ============ DOWNLOAD FUNCTIONALITY (Same as SharedMeScreen) ============
   Future<void> _downloadDocument(Document document) async {
     if (!document.allowDownload) {
-      _showSnackBar('Download not allowed for this document', Colors.orange);
+      _showSnackBar('Download is not allowed for this document', Colors.orange);
       return;
     }
 
@@ -134,7 +127,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
       debugPrint(
         ' Starting download for document: ${document.id} - ${document.name}',
       );
-      // CHANGED: Now uses SharedDocumentsService instead of SharedBrowseService
       final result = await _sharedService.downloadDocument(document.id);
 
       debugPrint('Download result keys: ${result.keys}');
@@ -158,10 +150,8 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
         if (fileData is List<int>) {
           bytesToSave = fileData;
         } else if (fileData is List<dynamic>) {
-          // Convert List<dynamic> to List<int>
           bytesToSave = fileData.cast<int>();
         } else if (fileData is String) {
-          // Convert String to bytes
           bytesToSave = utf8.encode(fileData);
         } else {
           debugPrint(
@@ -172,7 +162,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
           );
         }
 
-        // Check if data is not empty
         if (bytesToSave.isEmpty) {
           throw Exception('Downloaded file data is empty (0 bytes)');
         }
@@ -183,31 +172,25 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
 
         String filename = result['filename']?.toString() ?? document.name;
 
-        // If filename is just a number (document ID), use the document name
         if (RegExp(r'^\d+$').hasMatch(filename) && document.name.isNotEmpty) {
           filename = document.name;
         }
 
-        // Ensure correct file extension
         final docName = document.name;
         if (docName.isNotEmpty) {
           final extension = path.extension(docName);
-          // If the filename doesn't have the same extension as the document name
           if (!filename.toLowerCase().endsWith(extension.toLowerCase()) &&
               extension.isNotEmpty) {
-            // Remove any existing extension from filename and add the correct one
             final nameWithoutExt = path.withoutExtension(filename);
             filename = '$nameWithoutExt$extension';
           }
         }
 
-        // Ensure .py files have correct extension
         if (document.type.toLowerCase() == 'py' &&
             !filename.toLowerCase().endsWith('.py')) {
           filename = '$filename.py';
         }
 
-        // Also check if we need to add .pdf extension
         if (document.type.toLowerCase() == 'pdf' &&
             !filename.toLowerCase().endsWith('.pdf')) {
           filename = '$filename.pdf';
@@ -222,7 +205,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
 
         if (await file.exists()) {
           final fileSize = await file.length();
-          // ignore: unnecessary_brace_in_string_interps
           debugPrint('File saved: ${fileSize} bytes');
           _showSnackBar('Downloaded: $filename', Colors.green);
 
@@ -245,7 +227,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
             return;
           }
 
-          // Auto-open the downloaded file (same as My Documents)
           try {
             final uriToOpen = Platform.isAndroid
                 ? _getFileProviderUri(filePath)
@@ -258,7 +239,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
             if (openResult.type != ResultType.done) {
               debugPrint('⚠ Could not open file: ${openResult.message}');
 
-              // Fallback: Try normal path
               if (Platform.isAndroid) {
                 try {
                   await OpenFilex.open(filePath);
@@ -299,8 +279,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     }
   }
 
-  // ADDED: Helper methods from shared_me.dart
-  /// Get download directory (same as My Documents)
   Future<Directory> getDownloadDirectory() async {
     if (Platform.isAndroid) {
       return await getApplicationDocumentsDirectory();
@@ -310,7 +288,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     return Directory.current;
   }
 
-  /// Get FileProvider URI for Android
   String _getFileProviderUri(String filePath) {
     if (Platform.isAndroid) {
       try {
@@ -326,7 +303,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     return filePath;
   }
 
-  /// Show text content of .py files
   void _showFileContent(List<int> fileBytes, String filename) {
     try {
       final content = utf8.decode(fileBytes);
@@ -395,7 +371,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
             ),
             ElevatedButton.icon(
               onPressed: () {
-                // Copy to clipboard
                 Clipboard.setData(ClipboardData(text: content));
                 _showSnackBar('Code copied to clipboard', Colors.green);
                 Navigator.pop(context);
@@ -410,6 +385,11 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
       debugPrint('Error showing file content: $e');
       _showSnackBar('Cannot display file content', Colors.red);
     }
+  }
+
+  // ============ DOCUMENT HANDLING (Same as SharedMeScreen) ============
+  void _handleDocumentDoubleTap(Document document) {
+    _documentOpener.handleDoubleTap(context: context, document: document);
   }
 
   void _showDocumentDetails(Document document) {
@@ -432,10 +412,7 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
             children: [
               _buildDialogDetailRow('File Name', document.name),
               _buildDialogDetailRow('File Type', document.type.toUpperCase()),
-              _buildDialogDetailRow(
-                'Size',
-                _formatFileSize(document.size),
-              ), // UPDATED: Use formatted size
+              _buildDialogDetailRow('Size', _formatFileSize(document.size)),
               _buildDialogDetailRow('Owner', document.owner),
               _buildDialogDetailRow('Upload Date', document.uploadDate),
               _buildDialogDetailRow('Folder', document.folder),
@@ -476,49 +453,274 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     );
   }
 
-  // ADDED: Format file size method from shared_me.dart
-  String _formatFileSize(String size) {
-    try {
-      final cleanSize = size.replaceAll(RegExp(r'[^0-9]'), '');
-      final bytes = int.tryParse(cleanSize) ?? 0;
-      if (bytes == 0) return '0 B';
-      if (bytes < 1024) return '$bytes B';
-      if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-      if (bytes < 1024 * 1024 * 1024) {
-        return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-      }
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-    } catch (e) {
-      debugPrint('Error formatting file size: $e for input: $size');
-      return size;
-    }
+  void _showDocumentVersions(Document document) {
+    // You need to implement this based on your service
+    _showSnackBar('Version history not available', Colors.orange);
   }
 
-  Widget _buildDialogDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              '$label: ',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            ),
+  // ============ UPDATED DOCUMENT CARD (Same as SharedMeScreen) ============
+  Widget _buildDocumentCard(Document document) {
+    final fileInfo = _getFileInfo(document.type);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _handleDocumentDoubleTap(document),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header row with icon and title
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: fileInfo['color'].withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      fileInfo['icon'],
+                      color: fileInfo['color'],
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          document.name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            height: 1.3,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.person_outline,
+                              size: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Shared by: ${document.owner}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.folder_open,
+                              size: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '${document.folder} • ${document.classification}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Icon(
+                    Icons.description,
+                    size: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${document.type.toUpperCase()} • ${_formatFileSize(document.size)}',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    Icons.calendar_today,
+                    size: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    document.uploadDate,
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              if (document.keyword.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: document.keyword.split(',').map((keyword) {
+                      final trimmed = keyword.trim();
+                      if (trimmed.isEmpty) return const SizedBox.shrink();
+                      return Chip(
+                        label: Text(
+                          trimmed,
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        backgroundColor: Colors.indigo.withAlpha(10),
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 0,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+
+              // Action buttons row (View + Versions + Download) - SAME AS SharedMeScreen
+              Row(
+                children: [
+                  // VIEW BUTTON with visibility icon
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _handleDocumentDoubleTap(document),
+                      icon: const Icon(Icons.visibility, size: 18),
+                      label: const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Text('View', style: TextStyle(fontSize: 12)),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.purple,
+                        side: const BorderSide(color: Colors.purple),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // VERSIONS BUTTON
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showDocumentVersions(document),
+                      icon: const Icon(Icons.history, size: 18),
+                      label: const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Text('Versions', style: TextStyle(fontSize: 12)),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        side: const BorderSide(color: Colors.blue),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // DISABLED DOWNLOAD BUTTON (with popup)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showDownloadRestrictedPopup(context),
+                      icon: Icon(
+                        Icons.download,
+                        size: 18,
+                        color: Colors.grey.shade300,
+                      ),
+                      label: Text(
+                        'Download',
+                        style: TextStyle(color: Colors.grey.shade300),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey.shade200,
+                        foregroundColor: Colors.grey.shade300,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              // Tap hint (updated)
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Tap card or click "View" button',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade500,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 14),
-              softWrap: true,
-            ),
+        ),
+      ),
+    );
+  }
+
+  void _showDownloadRestrictedPopup(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.lock_outline, size: 48, color: Colors.orange),
+        title: const Text('Download Restricted'),
+        content: const Text(
+          'Download access is restricted for this shared document. '
+          'Please contact the document owner or system administrator '
+          'to request download permissions.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
           ),
         ],
       ),
     );
   }
 
+  // ============ HELPER METHODS ============
   Widget _buildSubfoldersSection() {
     if (_subfolders.isEmpty) return const SizedBox.shrink();
 
@@ -704,212 +906,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     );
   }
 
-  Widget _buildDocumentCard(Document document) {
-    final fileInfo = _getFileInfo(document.type);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header with file icon and name
-            GestureDetector(
-              onDoubleTap: () => _documentOpener.handleDoubleTap(
-                context: context,
-                document: document,
-              ),
-              onTap: () => _showDocumentDetails(document),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: fileInfo['color'].withAlpha(10),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      fileInfo['icon'],
-                      color: fileInfo['color'],
-                      size: 32,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          document.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatFileSize(
-                            document.size,
-                          ), // UPDATED: Use formatted size
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
-
-            // Document details in rows
-            _buildDetailRow(
-              'Type',
-              document.type.toUpperCase(),
-              Icons.category,
-            ),
-            if (document.keyword.isNotEmpty)
-              _buildDetailRow('Keyword', document.keyword, Icons.label),
-            _buildDetailRow(
-              'Upload Date',
-              document.uploadDate,
-              Icons.calendar_today,
-            ),
-            _buildDetailRow('Owner', document.owner, Icons.person),
-            _buildDetailRow(
-              'Format',
-              '${document.type.toUpperCase()} • ${_formatFileSize(document.size)}', // UPDATED
-              Icons.description,
-            ),
-            _buildDetailRow(
-              'Sharing',
-              document.sharingType,
-              Icons.share,
-              isBadge: true,
-              badgeColor: _getShareTypeColor(document.sharingType),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showDocumentDetails(document),
-                    icon: const Icon(Icons.info_outline, size: 16),
-                    label: const Text('Details'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.indigo,
-                      side: const BorderSide(color: Colors.indigo),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _documentOpener.handleDoubleTap(
-                      context: context,
-                      document: document,
-                    ),
-                    icon: const Icon(Icons.open_in_new, size: 16),
-                    label: const Text('Open'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: document.allowDownload
-                        ? () => _downloadDocument(document)
-                        : null,
-                    icon: const Icon(Icons.download, size: 16),
-                    label: const Text('Download'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: document.allowDownload
-                          ? Colors.green
-                          : Colors.grey,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Helper widget for detail rows (this is different from _buildDialogDetailRow)
-  Widget _buildDetailRow(
-    String label,
-    String value,
-    IconData icon, {
-    bool isBadge = false,
-    Color? badgeColor,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 16, color: Colors.indigo),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 80,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-            ),
-          ),
-          const SizedBox(width: 8),
-          if (isBadge && badgeColor != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: badgeColor,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                value.toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            )
-          else
-            Expanded(
-              child: Text(
-                value,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
@@ -945,7 +941,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     );
   }
 
-  // ADDED: Downloading banner widget from shared_me.dart
   Widget _buildDownloadingBanner() {
     return Container(
       width: double.infinity,
@@ -1036,6 +1031,31 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     }).toList();
   }
 
+  Widget _buildDialogDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14),
+              softWrap: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Icon _getFileIcon(String type, double size) {
     switch (type.toLowerCase()) {
       case 'pdf':
@@ -1053,9 +1073,15 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
       case 'jpg':
       case 'jpeg':
       case 'png':
-        return Icon(Icons.image, color: Colors.indigo, size: size);
+        return Icon(Icons.image, color: Colors.purple, size: size);
       case 'txt':
         return Icon(Icons.text_fields, color: Colors.grey, size: size);
+      case 'csv':
+        return Icon(
+          Icons.table_chart,
+          color: Colors.green.shade700,
+          size: size,
+        );
       default:
         return Icon(Icons.insert_drive_file, color: Colors.indigo, size: size);
     }
@@ -1078,22 +1104,30 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
       case 'jpg':
       case 'jpeg':
       case 'png':
-        return {'icon': Icons.image, 'color': Colors.indigo};
+        return {'icon': Icons.image, 'color': Colors.purple};
       case 'txt':
         return {'icon': Icons.text_fields, 'color': Colors.grey};
+      case 'csv':
+        return {'icon': Icons.table_chart, 'color': Colors.green.shade700};
       default:
         return {'icon': Icons.insert_drive_file, 'color': Colors.indigo};
     }
   }
 
-  Color _getShareTypeColor(String shareType) {
-    switch (shareType.toLowerCase()) {
-      case 'public':
-        return Colors.green;
-      case 'private':
-        return Colors.blue;
-      default:
-        return Colors.grey;
+  String _formatFileSize(String size) {
+    try {
+      final cleanSize = size.replaceAll(RegExp(r'[^0-9]'), '');
+      final bytes = int.tryParse(cleanSize) ?? 0;
+      if (bytes == 0) return '0 B';
+      if (bytes < 1024) return '$bytes B';
+      if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+      if (bytes < 1024 * 1024 * 1024) {
+        return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+      }
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    } catch (e) {
+      debugPrint('Error formatting file size: $e for input: $size');
+      return size;
     }
   }
 
@@ -1215,7 +1249,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
                     child: SingleChildScrollView(
                       child: Column(
                         children: [
-                          // ADDED: Downloading banner
                           if (_isDownloading) _buildDownloadingBanner(),
                           _buildSubfoldersSection(),
                           _buildDocumentsSection(),

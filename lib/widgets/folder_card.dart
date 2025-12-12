@@ -8,6 +8,7 @@ class FolderCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onShare;
 
+  // ignore: use_super_parameters
   const FolderCard({
     Key? key,
     required this.folder,
