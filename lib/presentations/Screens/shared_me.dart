@@ -1,4 +1,7 @@
 // screens/shared_me.dart
+// ignore: unused_import
+// ignore_for_file: unused_field, unused_import, unnecessary_brace_in_string_interps, unused_element
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -7,10 +10,16 @@ import 'package:digi_sanchika/services/shared_documents_service.dart';
 import 'package:digi_sanchika/local_storage.dart';
 import 'package:digi_sanchika/models/shared_folder.dart';
 import 'package:digi_sanchika/services/api_service.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:digi_sanchika/presentations/Screens/folder_screen.dart';
 import 'package:digi_sanchika/services/document_opener_service.dart';
+import 'package:digi_sanchika/presentations/Screens/shared_folder_screen.dart';
+
+// Add this import at the top
+import 'package:digi_sanchika/services/shared_folders_service.dart';
 
 class SharedMeScreen extends StatefulWidget {
   const SharedMeScreen({super.key});
@@ -22,6 +31,7 @@ class SharedMeScreen extends StatefulWidget {
 class _SharedMeScreenState extends State<SharedMeScreen> {
   // Services
   final SharedDocumentsService _sharedService = SharedDocumentsService();
+  // final SharedFoldersService _sharedFoldersService = SharedFoldersService();
   final DocumentOpenerService _documentOpener = DocumentOpenerService();
 
   // Controllers
@@ -35,7 +45,6 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   bool _hasError = false;
   bool _isDownloading = false;
   String _errorMessage = '';
-
   // Stats
   int _totalDocuments = 0;
   int _totalFolders = 0;
@@ -84,6 +93,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
       }
 
       // Try to load from backend first
+      // final response = await _sharedFoldersService.fetchSharedFolders();
       final response = await _sharedService.fetchSharedDocuments();
 
       if (!mounted) return;
@@ -225,50 +235,261 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     });
 
     try {
+      debugPrint(
+        ' Starting download for document: ${document.id} - ${document.name}',
+      );
       final result = await _sharedService.downloadDocument(document.id);
 
+      debugPrint('Download result keys: ${result.keys}');
+      debugPrint('Success: ${result['success']}');
+      debugPrint('Has fileData: ${result.containsKey('fileData')}');
+
       if (result['success'] == true) {
+        if (!result.containsKey('fileData')) {
+          debugPrint('fileData key missing in response');
+          throw Exception('Server did not return file data');
+        }
+        final fileData = result['fileData'];
+
+        if (fileData == null) {
+          debugPrint('fileData is null');
+          throw Exception('Server returned null file data');
+        }
+
+        List<int> bytesToSave;
+
+        if (fileData is List<int>) {
+          bytesToSave = fileData;
+        } else if (fileData is List<dynamic>) {
+          // Convert List<dynamic> to List<int>
+          bytesToSave = fileData.cast<int>();
+        } else if (fileData is String) {
+          // Convert String to bytes
+          bytesToSave = utf8.encode(fileData);
+        } else {
+          debugPrint(
+            '❌ fileData is not List<int>, it is: ${fileData.runtimeType}',
+          );
+          throw Exception(
+            'Invalid file data format. Expected List<int>, got ${fileData.runtimeType}',
+          );
+        }
+
+        // Check if data is not empty
+        if (bytesToSave.isEmpty) {
+          throw Exception('Downloaded file data is empty (0 bytes)');
+        }
+
+        debugPrint('✅ Received ${bytesToSave.length} bytes of file data');
+
         final directory = await getDownloadDirectory();
-        final filePath = '${directory.path}/${document.name}';
+
+        String filename = result['filename']?.toString() ?? document.name;
+
+        // If filename is just a number (document ID), use the document name
+        if (RegExp(r'^\d+$').hasMatch(filename) && document.name.isNotEmpty) {
+          filename = document.name;
+        }
+
+        // Ensure correct file extension
+        final docName = document.name;
+        if (docName.isNotEmpty) {
+          final extension = path.extension(docName);
+          // If the filename doesn't have the same extension as the document name
+          if (!filename.toLowerCase().endsWith(extension.toLowerCase()) &&
+              extension.isNotEmpty) {
+            // Remove any existing extension from filename and add the correct one
+            final nameWithoutExt = path.withoutExtension(filename);
+            filename = '$nameWithoutExt$extension';
+          }
+        }
+
+        // Ensure .py files have correct extension
+        if (document.type.toLowerCase() == 'py' &&
+            !filename.toLowerCase().endsWith('.py')) {
+          filename = '$filename.py';
+        }
+
+        // Also check if we need to add .pdf extension
+        if (document.type.toLowerCase() == 'pdf' &&
+            !filename.toLowerCase().endsWith('.pdf')) {
+          filename = '$filename.pdf';
+        }
+
+        final filePath = '${directory.path}/$filename';
+
+        debugPrint('Saving to: $filePath');
+
         final file = File(filePath);
-        await file.writeAsBytes(result['data'] as List<int>);
+        await file.writeAsBytes(bytesToSave);
 
-        _showSnackBar('Downloaded: ${document.name}', Colors.green);
+        if (await file.exists()) {
+          final fileSize = await file.length();
+          debugPrint('File saved: ${fileSize} bytes');
+          _showSnackBar('Downloaded: $filename', Colors.green);
 
-        // Auto-open the downloaded file (same as My Documents)
-        try {
-          final uriToOpen = Platform.isAndroid
-              ? _getFileProviderUri(filePath)
-              : filePath;
-
-          debugPrint('Opening with: $uriToOpen');
-
-          final openResult = await OpenFilex.open(uriToOpen);
-
-          if (openResult.type != ResultType.done) {
-            debugPrint('⚠ Could not open file: ${openResult.message}');
-
-            // Fallback: Try normal path
-            if (Platform.isAndroid) {
-              try {
-                await OpenFilex.open(filePath);
-              } catch (e) {
-                debugPrint('⚠ Fallback also failed: $e');
-              }
+          if (document.size == '0' ||
+              document.size == '0 KB' ||
+              document.size == '0 B') {
+            final docIndex = _sharedDocuments.indexWhere(
+              (d) => d.id == document.id,
+            );
+            if (docIndex != -1) {
+              setState(() {
+                _sharedDocuments[docIndex] = document.copyWith(
+                  size: fileSize.toString(),
+                );
+                _filteredDocuments = List.from(_sharedDocuments);
+              });
             }
           }
-        } catch (e) {
-          debugPrint('⚠ Error opening file: $e');
+
+          // } else {
+          //   throw Exception('Failed to save file to disk');
+          // }
+          final fileExtension = filename.toLowerCase().split('.').last;
+          if (fileExtension == 'py' || document.type.toLowerCase() == 'py') {
+            _showFileContent(bytesToSave, filename);
+            return;
+          }
+
+          // Auto-open the downloaded file (same as My Documents)
+          try {
+            final uriToOpen = Platform.isAndroid
+                ? _getFileProviderUri(filePath)
+                : filePath;
+
+            debugPrint('Opening with: $uriToOpen');
+
+            final openResult = await OpenFilex.open(uriToOpen);
+
+            if (openResult.type != ResultType.done) {
+              debugPrint('⚠ Could not open file: ${openResult.message}');
+
+              // Fallback: Try normal path
+              if (Platform.isAndroid) {
+                try {
+                  await OpenFilex.open(filePath);
+                } catch (e) {
+                  debugPrint('⚠ Fallback also failed: $e');
+                }
+              }
+              _showSnackBar(
+                'File downloaded. Could not open automatically.',
+                Colors.orange,
+              );
+            } else {
+              debugPrint('File opened successfully');
+            }
+          } catch (e) {
+            debugPrint('⚠ Error opening file: $e');
+            _showSnackBar(
+              'File downloaded. Use a compatible app to open it.',
+              Colors.blue,
+            );
+          }
+        } else {
+          throw Exception('Failed to save file to disk');
         }
       } else {
-        throw Exception(result['error'] ?? 'Download failed');
+        final errorMsg =
+            result['error'] ?? result['message'] ?? 'Download failed';
+        debugPrint('Download failed from service: $errorMsg');
+        throw Exception(errorMsg);
       }
     } catch (e) {
-      _showSnackBar('Download failed: $e', Colors.red);
+      debugPrint('Download error: $e');
+      _showSnackBar('Download failed: ${e.toString()}', Colors.red);
     } finally {
       setState(() {
         _isDownloading = false;
       });
+    }
+  }
+
+  /// Show text content of .py files
+  void _showFileContent(List<int> fileBytes, String filename) {
+    try {
+      final content = utf8.decode(fileBytes);
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              _getFileIcon('py', 24),
+              const SizedBox(width: 12),
+              Expanded(child: Text(filename, overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: MediaQuery.of(context).size.height * 0.6,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.code, size: 16, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Python file (${fileBytes.length} bytes)',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color.fromRGBO(224, 224, 224, 1),
+                      ),
+                    ),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        content,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                // Copy to clipboard
+                Clipboard.setData(ClipboardData(text: content));
+                _showSnackBar('Code copied to clipboard', Colors.green);
+                Navigator.pop(context);
+              },
+              icon: const Icon(Icons.copy, size: 18),
+              label: const Text('Copy'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error showing file content: $e');
+      _showSnackBar('Cannot display file content', Colors.red);
     }
   }
 
@@ -287,6 +508,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
       final data = result['data'] as Map<String, dynamic>;
 
       showDialog(
+        // ignore: use_build_context_synchronously
         context: context,
         builder: (context) => AlertDialog(
           title: Row(
@@ -405,6 +627,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
       final versions = data['versions'] as List<dynamic>;
 
       showDialog(
+        // ignore: use_build_context_synchronously
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Document Versions'),
@@ -567,27 +790,31 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   }
 
   /// Open a shared folder (navigate to FolderScreen)
-  void _openSharedFolder(SharedFolder folder) async {
-    // Check if we can access this folder
-    final canAccess = await _sharedService.canAccessSharedFolder(folder.id);
-
-    if (canAccess) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => FolderScreen(
-            folderId: folder.id,
-            folderName: folder.name,
-            userName: folder.owner,
-          ),
+  /// Open a shared folder (navigate to FolderScreen)
+  void _openSharedFolder(SharedFolder folder) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SharedFolderScreen(
+          folderId: folder.id,
+          folderName: folder.name,
+          userName: folder.owner,
         ),
-      );
-    } else {
-      _showSnackBar(
-        'Cannot access shared folder: ${folder.name}',
-        Colors.orange,
-      );
-    }
+      ),
+    );
+  }
+
+  void _viewAllSharedContent() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SharedFolderScreen(
+          folderId: null, // Root level
+          folderName: 'All Shared Content',
+          userName: null,
+        ),
+      ),
+    );
   }
 
   /// Build document item card (UPDATED: Single Download button + Double-tap)
@@ -740,7 +967,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                           trimmed,
                           style: const TextStyle(fontSize: 11),
                         ),
-                        backgroundColor: Colors.indigo.withOpacity(0.1),
+                        backgroundColor: Colors.indigo.withAlpha(10),
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -752,32 +979,61 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                 ),
 
               // Action buttons (ONLY DOWNLOAD BUTTON)
+              // Row(
+              //   children: [
+              //     // Single Download button (full width)
+              //     Expanded(
+              //       child: ElevatedButton.icon(
+              //         onPressed: () => _downloadDocument(document),
+              //         icon: Icon(
+              //           Icons.download,
+              //           size: 18,
+              //           color: document.allowDownload
+              //               ? Colors.white
+              //               : Colors.grey.shade300,
+              //         ),
+              //         label: Text(
+              //           document.allowDownload ? 'Download' : 'Not Allowed',
+              //           style: TextStyle(
+              //             color: document.allowDownload
+              //                 ? Colors.white
+              //                 : Colors.grey.shade300,
+              //           ),
+              //         ),
+              //         style: ElevatedButton.styleFrom(
+              //           backgroundColor: document.allowDownload
+              //               ? Colors.green
+              //               : Colors.grey.shade400,
+              //           foregroundColor: Colors.white,
+              //           padding: const EdgeInsets.symmetric(vertical: 12),
+              //           shape: RoundedRectangleBorder(
+              //             borderRadius: BorderRadius.circular(8),
+              //           ),
+              //         ),
+              //       ),
+              //     ),
+              //   ],
+              // ),
+
+              // Action buttons (DISABLED DOWNLOAD BUTTON)
               Row(
                 children: [
-                  // Single Download button (full width)
+                  // Single Download button (DISABLED)
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => _downloadDocument(document),
+                      onPressed: null, // Disabled
                       icon: Icon(
                         Icons.download,
                         size: 18,
-                        color: document.allowDownload
-                            ? Colors.white
-                            : Colors.grey.shade300,
+                        color: Colors.grey.shade300,
                       ),
                       label: Text(
-                        document.allowDownload ? 'Download' : 'Not Allowed',
-                        style: TextStyle(
-                          color: document.allowDownload
-                              ? Colors.white
-                              : Colors.grey.shade300,
-                        ),
+                        'Download',
+                        style: TextStyle(color: Colors.grey.shade300),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: document.allowDownload
-                            ? Colors.green
-                            : Colors.grey.shade400,
-                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.grey.shade200,
+                        foregroundColor: Colors.grey.shade300,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -871,14 +1127,17 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   /// Format file size
   String _formatFileSize(String size) {
     try {
-      final bytes = int.tryParse(size) ?? 0;
+      final cleanSize = size.replaceAll(RegExp(r'[^0-9]'), '');
+      final bytes = int.tryParse(cleanSize) ?? 0;
       if (bytes == 0) return '0 B';
       if (bytes < 1024) return '$bytes B';
       if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-      if (bytes < 1024 * 1024 * 1024)
+      if (bytes < 1024 * 1024 * 1024) {
         return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+      }
       return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
     } catch (e) {
+      debugPrint('Error formatting file size: $e for input: $size');
       return size;
     }
   }
@@ -994,7 +1253,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.grey.withOpacity(0.1),
+                              color: Colors.grey.withAlpha(10),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -1041,7 +1300,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.grey.withOpacity(0.1),
+                              color: Colors.grey.withAlpha(10),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -1181,7 +1440,10 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
           Expanded(
             child: Text(
               'Downloading document...',
-              style: TextStyle(color: Colors.green[800], fontSize: 12),
+              style: TextStyle(
+                color: const Color.fromARGB(255, 57, 170, 57),
+                fontSize: 12,
+              ),
             ),
           ),
         ],

@@ -1,4 +1,5 @@
 // services/shared_documents_service.dart
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -199,30 +200,118 @@ class SharedDocumentsService {
 
       debugPrint('📥 Downloading from: $url');
 
-      final response = await http.get(url, headers: headers);
+      final client = http.Client();
+
+      final response = await client
+          .get(url, headers: headers)
+          .timeout(
+            const Duration(seconds: 60),
+            onTimeout: () {
+              client.close();
+              throw TimeoutException('Download request timed out');
+            },
+          );
+
+      debugPrint(' Response status: ${response.statusCode}');
+      debugPrint(' Content-Type: ${response.headers['content-type']}');
 
       if (response.statusCode == 200) {
-        debugPrint('✅ Download successful for document: $documentId');
+        // debugPrint('✅ Download successful for document: $documentId');
+        // debugPrint(' File size: ${response.bodyBytes.length} bytes');
+        final contentType = response.headers['content-type'] ?? '';
 
+        // Check if response is JSON (error message) or actual file
+        if (contentType.contains('application/json')) {
+          // It's a JSON response, not a file
+          try {
+            final jsonData = json.decode(response.body);
+            debugPrint('⚠️ Got JSON response instead of file: $jsonData');
+
+            if (jsonData['error'] != null || jsonData['success'] == false) {
+              return {
+                'success': false,
+                'error': jsonData['error'] ?? 'Download failed',
+                'message': jsonData['message'] ?? 'Unable to download file',
+              };
+            }
+
+            // If no error in JSON but it's not a file, return generic error
+            return {
+              'success': false,
+              'error': 'Invalid response',
+              'message': 'Server returned JSON instead of file data',
+            };
+          } catch (e) {
+            debugPrint('Error parsing JSON response: $e');
+            return {
+              'success': false,
+              'error': 'Invalid JSON response',
+              'message': 'Server returned invalid JSON',
+            };
+          }
+        }
+
+        // If we get here, it should be a file
+
+        // Check if response has data
+        if (response.bodyBytes.isEmpty) {
+          debugPrint('⚠️ Warning: Response body is empty!');
+          return {
+            'success': false,
+            'error': 'Empty response',
+            'message': 'Server returned empty file',
+          };
+        }
+        debugPrint('✅ Download successful for document: $documentId');
+        debugPrint(' File size: ${response.bodyBytes.length} bytes');
         // Get filename from content-disposition header
         String? filename = documentId;
         final contentDisposition = response.headers['content-disposition'];
         if (contentDisposition != null) {
+          debugPrint(' Content-Disposition: $contentDisposition');
           final match = RegExp(
-            r'filename="([^"]+)"',
+            r'filename[^;=\n]*=([^;\n]+)',
           ).firstMatch(contentDisposition);
-          if (match != null) {
-            filename = match.group(1);
+
+          if (match != null && match.group(1) != null) {
+            String extracted = match.group(1)!;
+
+            if (extracted.startsWith('"') && extracted.endsWith('"')) {
+              extracted = extracted.substring(1, extracted.length - 1);
+            } else if (extracted.startsWith("'") && extracted.endsWith("'")) {
+              extracted = extracted.substring(1, extracted.length - 1);
+            }
+
+            if (extracted.startsWith("UTF-8''")) {
+              extracted = extracted.substring(7);
+            }
+            try {
+              extracted = Uri.decodeFull(extracted);
+            } catch (e) {
+              debugPrint('Error decoding filename: $e');
+            }
+            filename = extracted;
           }
         }
+
+        debugPrint('📄 Filename: $filename');
+        debugPrint('💾 File size: ${response.bodyBytes.length} bytes');
+
+        // if (filename == documentId) {
+        //   final urlParts = url.path.split('/');
+        //   if (urlParts.isNotEmpty) {
+        //     filename = urlParts.last;
+        //   }
+        // }
 
         return {
           'success': true,
           'fileData': response.bodyBytes,
           'filename': filename,
-          'contentType':
-              response.headers['content-type'] ?? 'application/octet-stream',
+          'contentType': contentType,
+          // response.headers['content-type'] ?? 'application/octet-stream',
           'message': 'Download completed successfully',
+          'size': response.bodyBytes.length,
         };
       } else if (response.statusCode == 401) {
         debugPrint('🔐 Authentication failed for download');
@@ -246,6 +335,7 @@ class SharedDocumentsService {
         };
       } else {
         debugPrint('❌ Download failed: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
         return {
           'success': false,
           'error': 'Download failed',

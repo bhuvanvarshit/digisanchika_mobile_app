@@ -1,4 +1,4 @@
-// ignore_for_file: use_build_context_synchronously
+// ignore_for_file: use_build_context_synchronously, unused_element
 
 import 'dart:ui';
 import 'package:digi_sanchika/presentations/Screens/home_page.dart';
@@ -186,7 +186,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 20),
 
                   const Text(
-                    'Digi Sanchika',
+                    'Digi-Sanchika',
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
@@ -197,7 +197,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 8),
 
                   const Text(
-                    'Employee Management System',
+                    'Document Management System',
                     style: TextStyle(fontSize: 16, color: Colors.white70),
                   ),
 
@@ -231,6 +231,7 @@ class _LoginPageState extends State<LoginPage> {
                           controller: _passwordController,
                           label: 'Password',
                           icon: Icons.lock,
+
                           obscureText: !_isPasswordVisible,
                           validator: (value) {
                             if (value == null || value.isEmpty) {
@@ -326,6 +327,9 @@ class _LoginPageState extends State<LoginPage> {
             obscureText: obscureText,
             validator: validator,
             style: const TextStyle(color: Colors.white, fontSize: 16),
+            cursorColor: Colors.white, // Explicit cursor color
+            cursorWidth: 2.0, // Explicit cursor width
+            cursorHeight: 20.0, // Explicit cursor height
             decoration: InputDecoration(
               labelText: label,
               labelStyle: const TextStyle(color: Colors.white70, fontSize: 16),

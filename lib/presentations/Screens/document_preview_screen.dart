@@ -299,10 +299,9 @@ class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> {
         backgroundColor: Colors.blue,
       ),
     );
-
-    // TODO: Use your download logic
     await Future.delayed(const Duration(seconds: 2));
 
+    // ignore: use_build_context_synchronously
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Download complete'),

@@ -1173,7 +1173,7 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
   String _selectedSharingType = 'Public';
   final List<PlatformFile> _uploadedFiles = [];
   bool _isLoading = false;
-  bool _isConnected = true;
+  final bool _isConnected = true;
 
   // NEW: Folder management variables
   List<Map<String, dynamic>> _availableFolders = [];
@@ -2049,7 +2049,7 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
             // Destination Folder Dropdown - UPDATED
             // Destination Folder Dropdown - SIMPLE VERSION
             DropdownButtonFormField<String>(
-              value: _selectedFolder, // Just use the value directly
+              initialValue: _selectedFolder, // Just use the value directly
               decoration: InputDecoration(
                 labelText: 'Destination Folder',
                 prefixIcon: _foldersLoading
@@ -2235,21 +2235,21 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
                     ],
                   ),
                 ),
-                DropdownMenuItem(
-                  value: 'Specific Users',
-                  child: Row(
-                    children: [
-                      const Icon(Icons.people, color: Colors.orange, size: 18),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Specific Users - Custom sharing',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                // DropdownMenuItem(
+                //   value: 'Specific Users',
+                //   child: Row(
+                //     children: [
+                //       const Icon(Icons.people, color: Colors.orange, size: 18),
+                //       const SizedBox(width: 10),
+                //       Expanded(
+                //         child: Text(
+                //           'Specific Users - Custom sharing',
+                //           overflow: TextOverflow.ellipsis,
+                //         ),
+                //       ),
+                //     ],
+                //   ),
+                // ),
               ],
               onChanged: (value) {
                 if (value != null) {

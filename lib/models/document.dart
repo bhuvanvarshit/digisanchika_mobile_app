@@ -115,9 +115,45 @@ class Document {
       allowDownload: true,
       sharingType: 'private',
       folder: 'General',
-      folderId: docJson['folder_id']?.toString(), // Can be null
+      folderId: docJson['folder_id']?.toString(),
       path: (docJson['filename'] ?? '').toString(),
       fileType: (docJson['file_type'] ?? 'unknown').toString(),
+    );
+  }
+
+  Document copyWith({
+    String? id,
+    String? name,
+    String? type,
+    String? size,
+    String? keyword,
+    String? uploadDate,
+    String? owner,
+    String? details,
+    String? classification,
+    bool? allowDownload,
+    String? sharingType,
+    String? folder,
+    String? folderId,
+    String? path,
+    String? fileType,
+  }) {
+    return Document(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      size: size ?? this.size,
+      keyword: keyword ?? this.keyword,
+      uploadDate: uploadDate ?? this.uploadDate,
+      owner: owner ?? this.owner,
+      details: details ?? this.details,
+      classification: classification ?? this.classification,
+      allowDownload: allowDownload ?? this.allowDownload,
+      sharingType: sharingType ?? this.sharingType,
+      folder: folder ?? this.folder,
+      folderId: folderId ?? this.folderId,
+      path: path ?? this.path,
+      fileType: fileType ?? this.fileType,
     );
   }
 }

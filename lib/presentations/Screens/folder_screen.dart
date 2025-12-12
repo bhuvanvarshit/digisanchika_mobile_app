@@ -1,8 +1,5 @@
 // presentations/Screens/folder_screen.dart
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:path/path.dart' as path;
 import 'package:digi_sanchika/services/folder_service.dart';
 import 'package:digi_sanchika/services/api_service.dart';
 import 'package:digi_sanchika/models/folder.dart';
@@ -113,6 +110,7 @@ class _FolderScreenState extends State<FolderScreen> {
     }
   }
 
+  // ignore: unused_element
   void _showDeleteConfirmation(BuildContext context, int index) {
     showDialog(
       context: context,
@@ -151,6 +149,7 @@ class _FolderScreenState extends State<FolderScreen> {
     }
   }
 
+  // ignore: unused_element
   Future<void> _downloadDocument(Document document) async {
     if (!ApiService.isConnected) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -188,6 +187,7 @@ class _FolderScreenState extends State<FolderScreen> {
     }
   }
 
+  // ignore: unused_element
   Future<void> _showShareDialog(Document document) async {
     // Use your existing share dialog logic
     ScaffoldMessenger.of(context).showSnackBar(
@@ -589,6 +589,7 @@ class _FolderScreenState extends State<FolderScreen> {
       return '${difference.inDays} days ago';
     } else if (difference.inDays < 30) {
       final weeks = (difference.inDays / 7).floor();
+      // ignore: unnecessary_brace_in_string_interps
       return '${weeks} week${weeks > 1 ? 's' : ''} ago';
     } else {
       return '${date.day}/${date.month}/${date.year}';
@@ -735,49 +736,49 @@ class _FolderScreenState extends State<FolderScreen> {
             if (document.details.isNotEmpty)
               _buildDetailRow('Details', document.details, Icons.info_outline),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _downloadDocument(document),
-                    icon: const Padding(
-                      padding: EdgeInsets.only(left: 4),
-                      child: Icon(Icons.download, size: 14),
-                    ),
-                    label: const Padding(
-                      padding: EdgeInsets.only(right: 6),
-                      child: Text('Download', style: TextStyle(fontSize: 11)),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green,
-                      side: const BorderSide(color: Colors.green),
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showShareDialog(document),
-                    icon: const Icon(Icons.share, size: 18),
-                    label: const Text('Share'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.orange,
-                      side: const BorderSide(color: Colors.orange),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () => _showDeleteConfirmation(context, index),
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  style: IconButton.styleFrom(
-                    side: const BorderSide(color: Colors.red),
-                  ),
-                ),
-              ],
-            ),
+            // Row(
+            //   children: [
+            //     Expanded(
+            //       child: OutlinedButton.icon(
+            //         onPressed: () => _downloadDocument(document),
+            //         icon: const Padding(
+            //           padding: EdgeInsets.only(left: 4),
+            //           child: Icon(Icons.download, size: 14),
+            //         ),
+            //         label: const Padding(
+            //           padding: EdgeInsets.only(right: 6),
+            //           child: Text('Download', style: TextStyle(fontSize: 11)),
+            //         ),
+            //         style: OutlinedButton.styleFrom(
+            //           foregroundColor: Colors.green,
+            //           side: const BorderSide(color: Colors.green),
+            //           padding: const EdgeInsets.symmetric(vertical: 6),
+            //         ),
+            //       ),
+            //     ),
+            //     const SizedBox(width: 8),
+            //     Expanded(
+            //       child: OutlinedButton.icon(
+            //         onPressed: () => _showShareDialog(document),
+            //         icon: const Icon(Icons.share, size: 18),
+            //         label: const Text('Share'),
+            //         style: OutlinedButton.styleFrom(
+            //           foregroundColor: Colors.orange,
+            //           side: const BorderSide(color: Colors.orange),
+            //           padding: const EdgeInsets.symmetric(vertical: 8),
+            //         ),
+            //       ),
+            //     ),
+            //     const SizedBox(width: 8),
+            //     IconButton(
+            //       onPressed: () => _showDeleteConfirmation(context, index),
+            //       icon: const Icon(Icons.delete, color: Colors.red),
+            //       style: IconButton.styleFrom(
+            //         side: const BorderSide(color: Colors.red),
+            //       ),
+            //     ),
+            //   ],
+            // ),
           ],
         ),
       ),

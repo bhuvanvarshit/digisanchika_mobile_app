@@ -1,13 +1,17 @@
 // presentations/Screens/document_library.dart
+// ignore_for_file: unused_element
+
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:digi_sanchika/services/api_service.dart'; // Add this import
 import 'package:digi_sanchika/models/document.dart';
 import 'package:digi_sanchika/local_storage.dart';
 import 'package:digi_sanchika/services/document_library_service.dart';
+import 'package:flutter/services.dart';
 
 class DocumentLibrary extends StatefulWidget {
   const DocumentLibrary({super.key});
@@ -46,7 +50,9 @@ class _DocumentLibraryState extends State<DocumentLibrary>
         _publicDocuments = documents;
       });
     } catch (e) {
-      print('Error loading library documents: $e');
+      if (kDebugMode) {
+        print('Error loading library documents: $e');
+      }
       // Fallback to local storage
       final localDocs = await LocalStorageService.loadDocuments(isPublic: true);
       setState(() {
@@ -80,6 +86,9 @@ class _DocumentLibraryState extends State<DocumentLibrary>
   List<Document> get _filteredDocuments {
     List<Document> filtered = _publicDocuments.where((doc) {
       final query = _searchQuery.toLowerCase();
+      final docType = doc.type.toUpperCase();
+
+      bool isExcelFile = docType == 'XLS' || docType == 'XLSX';
       final matchesSearch =
           doc.name.toLowerCase().contains(query) ||
           doc.keyword.toLowerCase().contains(query) ||
@@ -87,10 +96,16 @@ class _DocumentLibraryState extends State<DocumentLibrary>
           doc.owner.toLowerCase().contains(query) ||
           doc.folder.toLowerCase().contains(query);
 
-      final matchesFilter =
-          _selectedFilter == 'All' ||
-          doc.type.toLowerCase().contains(_selectedFilter.toLowerCase());
-
+      bool matchesFilter;
+      if (_selectedFilter == 'All') {
+        matchesFilter = true;
+      } else if (_selectedFilter == 'XLSX' && isExcelFile) {
+        matchesFilter = true;
+      } else {
+        matchesFilter = doc.type.toLowerCase().contains(
+          _selectedFilter.toLowerCase(),
+        );
+      }
       return matchesSearch && matchesFilter;
     }).toList();
 
@@ -422,25 +437,31 @@ class _DocumentLibraryState extends State<DocumentLibrary>
                               color: Colors.grey,
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              'By: ${document.owner}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade600,
+                            Flexible(
+                              child: Text(
+                                'By: ${document.owner}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 8),
                             Icon(
                               Icons.folder_open,
                               size: 12,
                               color: Colors.grey,
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              document.folder,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade600,
+                            Flexible(
+                              child: Text(
+                                document.folder,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
@@ -448,11 +469,11 @@ class _DocumentLibraryState extends State<DocumentLibrary>
                       ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: () => _showDeleteConfirmation(document, index),
-                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                    tooltip: 'Delete Document',
-                  ),
+                  // IconButton(
+                  //   onPressed: () => _showDeleteConfirmation(document, index),
+                  //   icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                  //   tooltip: 'Delete Document',
+                  // ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -646,109 +667,166 @@ class _DocumentLibraryState extends State<DocumentLibrary>
 
   // Download document
   Future<void> _downloadDocument(Document document) async {
+    if (!document.allowDownload) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download is not allowed for ${document.name}'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isDownloading = true;
+      _downloadingFileName = document.name;
+    });
+
     try {
-      setState(() {
-        _isDownloading = true;
-        _downloadingFileName = document.name;
-      });
-
-      // Check storage permission
-      bool permissionGranted = false;
-      if (Platform.isAndroid) {
-        if (await Permission.storage.isGranted) {
-          permissionGranted = true;
-        } else {
-          final status = await Permission.storage.request();
-          permissionGranted = status.isGranted;
-        }
-      } else {
-        permissionGranted = true;
-      }
-
-      if (!permissionGranted) {
-        await _showPermissionDeniedDialog();
-        setState(() {
-          _isDownloading = false;
-          _downloadingFileName = null;
-        });
-        return;
-      }
-
-      // Get downloads directory
-      Directory? directory;
-      if (Platform.isAndroid) {
-        directory = Directory('/storage/emulated/0/Download');
-      } else {
-        directory = await getDownloadsDirectory();
-      }
-      directory ??= await getApplicationDocumentsDirectory();
-
-      if (!directory.existsSync()) {
-        directory.createSync(recursive: true);
-      }
-
-      // Create proper filename
-      String fileName = document.name;
-      if (!fileName.contains('.')) {
-        fileName = '$fileName.${document.type.toLowerCase()}';
-      }
-
-      final filePath = '${directory.path}/$fileName';
-      final file = File(filePath);
-
-      // Check if file exists
-      if (await file.exists()) {
-        bool shouldOverwrite = await _showOverwriteDialog(fileName);
-        if (!shouldOverwrite) {
-          setState(() {
-            _isDownloading = false;
-            _downloadingFileName = null;
-          });
-          return;
-        }
-      }
-
-      // Download from API
-      final result = await _libraryService.downloadDocument(
-        document.id,
-        fileName,
+      debugPrint(
+        'Starting download for document: ${document.id} - ${document.name}',
       );
 
+      final result = await _libraryService.downloadDocument(
+        document.id,
+        document.name,
+      );
+
+      debugPrint('Download result keys: ${result.keys}');
+      debugPrint('Success: ${result['success']}');
+
       if (result['success'] == true) {
-        final fileData = result['data'] as List<int>;
-        await file.writeAsBytes(fileData);
+        if (!result.containsKey('data')) {
+          debugPrint('data key missing in response');
+          throw Exception('Server did not return file data');
+        }
 
-        // Try to open the file
-        final openResult = await OpenFilex.open(filePath);
+        final fileData = result['data'];
+        List<int> bytesToSave;
 
-        if (mounted) {
-          if (openResult.type == ResultType.done) {
+        if (fileData is List<int>) {
+          bytesToSave = fileData;
+        } else if (fileData is List<dynamic>) {
+          bytesToSave = fileData.cast<int>();
+        } else if (fileData is String) {
+          bytesToSave = utf8.encode(fileData);
+        } else {
+          throw Exception('Invalid file data format');
+        }
+
+        if (bytesToSave.isEmpty) {
+          throw Exception('Downloaded file data is empty (0 bytes)');
+        }
+
+        debugPrint('✅ Received ${bytesToSave.length} bytes of file data');
+
+        // Get directory
+        Directory directory;
+        if (Platform.isAndroid) {
+          directory = Directory('/storage/emulated/0/Download');
+          if (!directory.existsSync()) {
+            directory = await getApplicationDocumentsDirectory();
+          }
+        } else if (Platform.isIOS) {
+          directory = (await getDownloadsDirectory())!;
+        } else {
+          directory = await getApplicationDocumentsDirectory();
+        }
+
+        if (!directory.existsSync()) {
+          directory.createSync(recursive: true);
+        }
+
+        // Create filename
+        String filename = document.name;
+        final extension = '.${document.type.toLowerCase()}';
+        if (!filename.toLowerCase().endsWith(extension.toLowerCase())) {
+          filename = '$filename$extension';
+        }
+
+        // Add timestamp to create unique filename
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final nameWithoutExt = filename.substring(0, filename.lastIndexOf('.'));
+        final ext = filename.substring(filename.lastIndexOf('.'));
+        final uniqueFilename = '${nameWithoutExt}_$timestamp$ext';
+
+        final filePath = '${directory.path}/$uniqueFilename';
+        debugPrint('Saving to: $filePath');
+
+        final file = File(filePath);
+
+        // // Check if file exists
+        // if (await file.exists()) {
+        //   bool shouldOverwrite = await _showOverwriteDialog(filename);
+        //   if (!shouldOverwrite) {
+        //     setState(() {
+        //       _isDownloading = false;
+        //       _downloadingFileName = null;
+        //     });
+        //     return;
+        //   }
+        // }
+
+        await file.writeAsBytes(bytesToSave);
+
+        if (await file.exists()) {
+          final fileSize = await file.length();
+          // ignore: unnecessary_brace_in_string_interps
+          debugPrint('File saved: ${fileSize} bytes');
+
+          if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('$fileName downloaded successfully!'),
+                content: Text('Downloaded: $filename'),
                 backgroundColor: Colors.green,
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Downloaded but could not open: ${openResult.message}',
-                ),
-                backgroundColor: Colors.orange,
               ),
             );
           }
-        }
 
-        if (kDebugMode) {
-          print('✅ Downloaded: $fileName to ${directory.path}');
+          // Special handling for Python files
+          if (document.type.toLowerCase() == 'py') {
+            _showFileContent(bytesToSave, filename);
+            return;
+          }
+
+          // Auto-open the downloaded file
+          try {
+            final openResult = await OpenFilex.open(filePath);
+
+            if (openResult.type != ResultType.done) {
+              debugPrint('⚠ Could not open file: ${openResult.message}');
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Downloaded. Could not open automatically.'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            }
+          } catch (e) {
+            debugPrint('⚠ Error opening file: $e');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Downloaded. Use a compatible app to open it.'),
+                  backgroundColor: Colors.blue,
+                ),
+              );
+            }
+          }
+        } else {
+          throw Exception('Failed to save file to disk');
         }
       } else {
-        throw Exception(result['error']);
+        final errorMsg = result['error'] ?? 'Download failed';
+        debugPrint('Download failed from service: $errorMsg');
+        throw Exception(errorMsg);
       }
     } catch (e) {
+      debugPrint('Download error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -757,15 +835,109 @@ class _DocumentLibraryState extends State<DocumentLibrary>
           ),
         );
       }
-      if (kDebugMode) {
-        print('❌ Download error: $e');
-      }
     } finally {
+      setState(() {
+        _isDownloading = false;
+        _downloadingFileName = null;
+      });
+    }
+  }
+
+  // Helper method to show Python file content
+  void _showFileContent(List<int> fileBytes, String filename) {
+    try {
+      final content = utf8.decode(fileBytes);
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Row(
+            children: [
+              Icon(_getDocumentIcon('py'), size: 24),
+              const SizedBox(width: 12),
+              Expanded(child: Text(filename, overflow: TextOverflow.ellipsis)),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: MediaQuery.of(context).size.height * 0.6,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.code, size: 16, color: Colors.blue),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Python file (${fileBytes.length} bytes)',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color.fromRGBO(224, 224, 224, 1),
+                      ),
+                    ),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        content,
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: content));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Code copied to clipboard'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+                Navigator.pop(context);
+              },
+              icon: const Icon(Icons.copy, size: 18),
+              label: const Text('Copy'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error showing file content: $e');
       if (mounted) {
-        setState(() {
-          _isDownloading = false;
-          _downloadingFileName = null;
-        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Cannot display file content'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -890,6 +1062,7 @@ class _DocumentLibraryState extends State<DocumentLibrary>
       final versions = result['versions'] as List;
 
       showDialog(
+        // ignore: use_build_context_synchronously
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Document Versions'),
@@ -935,6 +1108,7 @@ class _DocumentLibraryState extends State<DocumentLibrary>
         ),
       );
     } else {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result['error'].toString()),
@@ -1006,121 +1180,138 @@ class _DocumentLibraryState extends State<DocumentLibrary>
   Future<void> _deleteDocument(Document document, int index) async {
     try {
       // Try to delete from backend
-      final result = await _libraryService.deleteDocument(document.id);
+      if (ApiService.isConnected) {
+        final result = await _libraryService.deleteDocument(document.id);
 
-      if (result['success'] == true) {
-        // Remove from local storage
-        await LocalStorageService.deleteDocument(document.name, isPublic: true);
+        if (result['success'] == true) {
+          // Remove from local storage
+          await LocalStorageService.deleteDocument(
+            document.name,
+            isPublic: true,
+          );
 
-        // Update UI
-        setState(() {
-          _publicDocuments.removeAt(index);
-        });
+          // Update UI
+          if (mounted) {
+            setState(() {
+              _publicDocuments.removeWhere((doc) => doc.id == document.id);
 
-        if (mounted) {
+              _loadPublicDocuments();
+            });
+          }
+
+          // ignore: use_build_context_synchronously
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(result['message'].toString()),
+              content: Text(
+                result['message']?.toString() ??
+                    'Document deleted successfully',
+              ),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 2),
             ),
           );
+        } else {
+          throw Exception(result['error']?.toString() ?? 'Delete failed');
         }
       } else {
         // If backend delete fails, still remove from local view
-        await LocalStorageService.deleteDocument(document.name, isPublic: true);
-
-        setState(() {
-          _publicDocuments.removeAt(index);
-        });
+        await LocalStorageService.deleteDocument(document.id, isPublic: true);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Removed from local library view'),
-              backgroundColor: Colors.orange,
-            ),
-          );
+          setState(() {
+            _publicDocuments.removeWhere((doc) => doc.id == document.id);
+          });
         }
+        // ignore: use_build_context_synchronously
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Offline - Removed from local view'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
     } catch (e) {
+      debugPrint('Delete error: $e');
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to delete document: $e'),
+            content: Text('Failed to delete: ${e.toString()}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 2),
           ),
         );
       }
     }
   }
 
-  // Helper: Show permission denied dialog
-  Future<void> _showPermissionDeniedDialog() async {
-    await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Storage Permission Required'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.warning, color: Colors.orange),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Downloading files requires storage permission. '
-                    'Please grant the permission in app settings to continue.',
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actionsAlignment: MainAxisAlignment.end,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              openAppSettings();
-            },
-            child: const Text('Open Settings'),
-          ),
-        ],
-      ),
-    );
-  }
+  // // Helper: Show permission denied dialog
+  // Future<void> _showPermissionDeniedDialog() async {
+  //   await showDialog(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       title: const Text('Storage Permission Required'),
+  //       content: Column(
+  //         mainAxisSize: MainAxisSize.min,
+  //         children: const [
+  //           Row(
+  //             crossAxisAlignment: CrossAxisAlignment.start,
+  //             children: [
+  //               Icon(Icons.warning, color: Colors.orange),
+  //               SizedBox(width: 12),
+  //               Expanded(
+  //                 child: Text(
+  //                   'Downloading files requires storage permission. '
+  //                   'Please grant the permission in app settings to continue.',
+  //                 ),
+  //               ),
+  //             ],
+  //           ),
+  //         ],
+  //       ),
+  //       actionsAlignment: MainAxisAlignment.end,
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context),
+  //           child: const Text('Cancel'),
+  //         ),
+  //         ElevatedButton(
+  //           onPressed: () {
+  //             Navigator.pop(context);
+  //             openAppSettings();
+  //           },
+  //           child: const Text('Open Settings'),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
-  // Helper: Show overwrite dialog
-  Future<bool> _showOverwriteDialog(String fileName) async {
-    bool? result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('File Exists'),
-        content: Text(
-          '"$fileName" already exists. Do you want to overwrite it?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Overwrite'),
-          ),
-        ],
-      ),
-    );
-    return result ?? false;
-  }
+  // // Helper: Show overwrite dialog
+  // Future<bool> _showOverwriteDialog(String fileName) async {
+  //   bool? result = await showDialog<bool>(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       title: const Text('File Exists'),
+  //       content: Text(
+  //         '"$fileName" already exists. Do you want to overwrite it?',
+  //       ),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context, false),
+  //           child: const Text('Cancel'),
+  //         ),
+  //         ElevatedButton(
+  //           onPressed: () => Navigator.pop(context, true),
+  //           style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+  //           child: const Text('Overwrite'),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  //   return result ?? false;
+  // }
 
   // Helper: Format date
   String _formatDate(dynamic date) {

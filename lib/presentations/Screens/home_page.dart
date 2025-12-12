@@ -1,6 +1,8 @@
-// presentations/Screens/home_page.dart - FIXED VERSION
+// presentations/Screens/home_page.dart
+
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
@@ -12,11 +14,13 @@ import 'package:digi_sanchika/services/api_service.dart';
 import 'package:digi_sanchika/services/my_documents_service.dart';
 import 'package:digi_sanchika/presentations/Screens/document_library.dart';
 import 'package:digi_sanchika/presentations/Screens/upload_document.dart';
-import 'package:digi_sanchika/presentations/Screens/folder_screen.dart'; // NEW
+import 'package:digi_sanchika/presentations/Screens/folder_screen.dart';
 import 'package:digi_sanchika/presentations/Screens/shared_me.dart';
 import 'package:digi_sanchika/services/document_opener_service.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:digi_sanchika/presentations/Screens/profile_screen.dart';
 
 class HomePage extends StatefulWidget {
   final String? userName;
@@ -42,9 +46,11 @@ class _HomePageState extends State<HomePage>
   bool _isLoading = false;
   bool _isDownloading = false;
   bool _isUploading = false;
+  bool _showProfileDrawer = false;
   int? _currentFolderId;
+  // ignore: unused_field
   Document? _selectedDocument;
-  String _searchScope = 'my-documents';
+  // String _searchScope = 'my-documents';
 
   @override
   void initState() {
@@ -54,6 +60,11 @@ class _HomePageState extends State<HomePage>
 
     _initializeBackend();
 
+    // // Show the tip every time user logs in
+    // WidgetsBinding.instance.addPostFrameCallback((_) {
+    //   _showDoubleTapDialog();
+    // });
+
     _tabController.addListener(() {
       if (_tabController.index == 1) {
         setState(() {});
@@ -61,6 +72,59 @@ class _HomePageState extends State<HomePage>
         _refreshData();
       }
     });
+  }
+
+  // Future<void> _showDoubleTapTipOnce() async {
+  //   final prefs = await SharedPreferences.getInstance();
+  //   final hasSeenTip = prefs.getBool('seenDoubleTapTip') ?? false;
+  //   _showDoubleTapDialog();
+  //   // if (!hasSeenTip && mounted) {
+  //   //   _showDoubleTapDialog();
+  //   //   await prefs.setBool('seenDoubleTapTip', true);
+  //   // }
+  // }
+
+  // void _showDoubleTapDialog() {
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+  //       title: Row(
+  //         children: [
+  //           const Icon(Icons.touch_app, color: Colors.black, size: 28),
+  //           const SizedBox(width: 12),
+  //           const Text(
+  //             'Quick Tip',
+  //             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+  //           ),
+  //         ],
+  //       ),
+  //       content: const Text(
+  //         'To view any document, simply double-tap the file name.',
+  //         style: TextStyle(fontSize: 16),
+  //       ),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.pop(context),
+  //           child: const Text('Got it', style: TextStyle(color: Colors.black)),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+  // ADD THE getUserInitial METHOD HERE
+  String _getUserInitial() {
+    if (widget.userName == null || widget.userName!.isEmpty) {
+      return 'U'; // Default to 'U' for User
+    }
+
+    // Get the first character of the first word (or first character of the name)
+    final nameParts = widget.userName!.trim().split(' ');
+    if (nameParts.isNotEmpty) {
+      return nameParts[0][0].toUpperCase();
+    }
+
+    return widget.userName![0].toUpperCase();
   }
 
   Future<void> _initializeBackend() async {
@@ -77,7 +141,7 @@ class _HomePageState extends State<HomePage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Data synced from backend'),
+            content: Text('Latest info loaded successfully.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -87,7 +151,7 @@ class _HomePageState extends State<HomePage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Using local storage (offline)'),
+            content: Text('You’re offline. Showing saved data'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -103,7 +167,9 @@ class _HomePageState extends State<HomePage>
         _organizeDocumentsIntoFolders();
       });
     } catch (e) {
-      print('Error loading from local storage: $e');
+      if (kDebugMode) {
+        print('Error loading from local storage: $e');
+      }
     }
   }
 
@@ -173,16 +239,19 @@ class _HomePageState extends State<HomePage>
         }
 
         extractIds(foldersData);
-        print('📁 Found ${allIds.length} folder IDs');
+        if (kDebugMode) {
+          print('📁 Found ${allIds.length} folder IDs');
+        }
         return allIds;
       }
     } catch (e) {
-      print('Error getting folders: $e');
+      if (kDebugMode) {
+        print('Error getting folders: $e');
+      }
     }
     return [];
   }
 
-  // In home_page.dart, line 196:
   List<Document> _convertToDocumentList(
     List<dynamic> docList,
     int? folderId,
@@ -213,7 +282,9 @@ class _HomePageState extends State<HomePage>
   // NEW METHOD: Load ALL user documents from all folders
   Future<void> _loadAllUserDocuments() async {
     if (!ApiService.isConnected) {
-      print('⚠ Skipping backend load - not connected');
+      if (kDebugMode) {
+        print('⚠ Skipping backend load - not connected');
+      }
       return;
     }
 
@@ -222,7 +293,9 @@ class _HomePageState extends State<HomePage>
     });
 
     try {
-      print('🔄 Loading ALL user documents...');
+      if (kDebugMode) {
+        print('🔄 Loading ALL user documents...');
+      }
 
       // 1. Get all folder IDs
       List<int> allFolderIds = await _getAllFolderIds();
@@ -239,7 +312,9 @@ class _HomePageState extends State<HomePage>
       }
 
       // 3. Execute in parallel
-      print('🚀 Executing ${futures.length} parallel requests...');
+      if (kDebugMode) {
+        print('🚀 Executing ${futures.length} parallel requests...');
+      }
       List<Map<String, dynamic>> results = await Future.wait(futures);
 
       // 4. Process results
@@ -305,21 +380,31 @@ class _HomePageState extends State<HomePage>
           );
         }
 
-        print(
-          '✅ Loaded ${allDocuments.length} total documents from ${results.length} sources',
-        );
+        if (kDebugMode) {
+          print(
+            '✅ Loaded ${allDocuments.length} total documents from ${results.length} sources',
+          );
+        }
       });
 
       // 6. Save to local storage
       try {
         await LocalStorageService.saveDocuments(allDocuments);
-        print('💾 Saved ${allDocuments.length} documents to local storage');
+        if (kDebugMode) {
+          print('💾 Saved ${allDocuments.length} documents to local storage');
+        }
       } catch (e) {
-        print('⚠ Error saving to local storage: $e');
+        if (kDebugMode) {
+          print('⚠ Error saving to local storage: $e');
+        }
       }
     } catch (e, stackTrace) {
-      print('❌ Exception in _loadAllUserDocuments: $e');
-      print('Stack trace: $stackTrace');
+      if (kDebugMode) {
+        print('❌ Exception in _loadAllUserDocuments: $e');
+      }
+      if (kDebugMode) {
+        print('Stack trace: $stackTrace');
+      }
       await _loadDataFromLocalStorage();
     } finally {
       if (mounted) {
@@ -350,15 +435,11 @@ class _HomePageState extends State<HomePage>
         return {'documents': [], 'folders': []};
       }
     } catch (e) {
-      print('Error fetching documents for folder $folderId: $e');
+      if (kDebugMode) {
+        print('Error fetching documents for folder $folderId: $e');
+      }
       return {'documents': [], 'folders': []};
     }
-  }
-
-  // OLD METHOD: Keep for reference but don't use
-  Future<void> _loadDataFromBackend() async {
-    // This method is replaced by _loadAllUserDocuments
-    await _loadAllUserDocuments();
   }
 
   void _loadInitialData() {
@@ -420,7 +501,9 @@ class _HomePageState extends State<HomePage>
         throw Exception(result['error']);
       }
     } catch (e) {
-      print('Error creating folder in backend: $e');
+      if (kDebugMode) {
+        print('Error creating folder in backend: $e');
+      }
       _addNewFolder(folderName);
     }
   }
@@ -432,6 +515,7 @@ class _HomePageState extends State<HomePage>
     };
 
     try {
+      // ignore: unnecessary_null_comparison
       if (ApiService.getSessionCookie != null) {
         final cookie = await ApiService.getSessionCookie();
         if (cookie != null && cookie.isNotEmpty) {
@@ -439,7 +523,9 @@ class _HomePageState extends State<HomePage>
         }
       }
     } catch (e) {
-      print('⚠ Could not get session cookie: $e');
+      if (kDebugMode) {
+        print('⚠ Could not get session cookie: $e');
+      }
     }
 
     return headers;
@@ -457,7 +543,9 @@ class _HomePageState extends State<HomePage>
             throw Exception(result['error']);
           }
         } catch (e) {
-          print('Error deleting folder from backend: $e');
+          if (kDebugMode) {
+            print('Error deleting folder from backend: $e');
+          }
         }
       }
 
@@ -467,6 +555,7 @@ class _HomePageState extends State<HomePage>
         folders.removeAt(index);
       });
 
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Folder "$folderName" deleted successfully'),
@@ -495,6 +584,7 @@ class _HomePageState extends State<HomePage>
           isPublic: docToDelete.sharingType == 'Public',
         );
 
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -504,6 +594,7 @@ class _HomePageState extends State<HomePage>
           ),
         );
       } catch (e) {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to delete document: $e'),
@@ -539,8 +630,11 @@ class _HomePageState extends State<HomePage>
         final file = File(filePath);
         await file.writeAsBytes(result['data'] as List<int>);
 
-        print('✅ Downloaded to: $filePath');
+        if (kDebugMode) {
+          print('✅ Downloaded to: $filePath');
+        }
 
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Downloaded: ${document.name}'),
@@ -554,30 +648,41 @@ class _HomePageState extends State<HomePage>
               ? _getFileProviderUri(filePath)
               : filePath;
 
-          print('📂 Opening with: $uriToOpen');
+          if (kDebugMode) {
+            print('📂 Opening with: $uriToOpen');
+          }
 
           final result = await OpenFilex.open(uriToOpen);
 
           if (result.type != ResultType.done) {
-            print('⚠ Could not open file automatically: ${result.message}');
+            if (kDebugMode) {
+              print('⚠ Could not open file automatically: ${result.message}');
+            }
 
             // Fallback: Try normal path if URI fails
             if (Platform.isAndroid) {
-              print('🔄 Trying fallback with normal path...');
+              if (kDebugMode) {
+                print('🔄 Trying fallback with normal path...');
+              }
               try {
                 await OpenFilex.open(filePath);
               } catch (fallbackError) {
-                print('⚠ Fallback also failed: $fallbackError');
+                if (kDebugMode) {
+                  print('⚠ Fallback also failed: $fallbackError');
+                }
               }
             }
           }
         } catch (e) {
-          print('⚠ Error opening file: $e');
+          if (kDebugMode) {
+            print('⚠ Error opening file: $e');
+          }
         }
       } else {
         throw Exception(result['error']);
       }
     } catch (e) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Download failed: $e'),
@@ -614,7 +719,9 @@ class _HomePageState extends State<HomePage>
           return 'content://com.example.digi_sanchika.fileprovider/files/$fileName';
         }
       } catch (e) {
-        print('⚠ Error creating FileProvider URI: $e');
+        if (kDebugMode) {
+          print('⚠ Error creating FileProvider URI: $e');
+        }
       }
     }
     // For iOS, return normal path
@@ -639,9 +746,11 @@ class _HomePageState extends State<HomePage>
         final versions = result['versions'] as List;
 
         showDialog(
+          // ignore: use_build_context_synchronously
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Document Versions'),
+            // ignore: sized_box_for_whitespace
             content: Container(
               width: double.maxFinite,
               child: ListView.builder(
@@ -682,6 +791,7 @@ class _HomePageState extends State<HomePage>
         throw Exception(result['error']);
       }
     } catch (e) {
+      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to load versions: $e'),
@@ -952,7 +1062,9 @@ class _HomePageState extends State<HomePage>
         });
       }
     } catch (e) {
-      print('Error loading document details: $e');
+      if (kDebugMode) {
+        print('Error loading document details: $e');
+      }
     }
   }
 
@@ -977,276 +1089,7 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  Future<void> _showEnhancedSearchDialog() async {
-    final searchCriteria = <String, dynamic>{
-      'keyword': '',
-      'filename': '',
-      'user': '',
-      'use_keyword': false,
-      'use_filename': false,
-      'use_user': false,
-      'use_date': false,
-      'from_date': '',
-      'to_date': '',
-    };
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: const Text('Advanced Search'),
-            content: Container(
-              width: double.maxFinite,
-              constraints: const BoxConstraints(maxHeight: 500),
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    _buildSearchScopeSelector(setState),
-                    const SizedBox(height: 20),
-                    _buildSearchField(
-                      'Keyword',
-                      searchCriteria['keyword'] as String,
-                      (value) => searchCriteria['keyword'] = value,
-                      searchCriteria['use_keyword'] as bool,
-                      (value) => searchCriteria['use_keyword'] = value,
-                      Icons.search,
-                    ),
-                    _buildSearchField(
-                      'Filename',
-                      searchCriteria['filename'] as String,
-                      (value) => searchCriteria['filename'] = value,
-                      searchCriteria['use_filename'] as bool,
-                      (value) => searchCriteria['use_filename'] = value,
-                      Icons.insert_drive_file,
-                    ),
-                    _buildSearchField(
-                      'Uploaded by',
-                      searchCriteria['user'] as String,
-                      (value) => searchCriteria['user'] = value,
-                      searchCriteria['use_user'] as bool,
-                      (value) => searchCriteria['use_user'] = value,
-                      Icons.person,
-                    ),
-                    _buildDateRangeField(searchCriteria, setState),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await _performEnhancedSearch(searchCriteria);
-                },
-                child: const Text('Search'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSearchScopeSelector(StateSetter setState) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Search Scope:',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: _searchScope,
-          items: const [
-            DropdownMenuItem(
-              value: 'my-documents',
-              child: Text('My Documents'),
-            ),
-            DropdownMenuItem(value: 'library', child: Text('Document Library')),
-            DropdownMenuItem(value: 'shared', child: Text('Shared with Me')),
-            DropdownMenuItem(value: 'all', child: Text('All Documents')),
-          ],
-          onChanged: (value) {
-            setState(() {
-              _searchScope = value!;
-            });
-          },
-          decoration: InputDecoration(
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSearchField(
-    String label,
-    String value,
-    Function(String) onChanged,
-    bool useField,
-    Function(bool) onUseChanged,
-    IconData icon,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Checkbox(
-              value: useField,
-              onChanged: (val) => onUseChanged(val ?? false),
-            ),
-            Icon(icon, size: 20),
-            const SizedBox(width: 8),
-            Text(label),
-          ],
-        ),
-        if (useField)
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'Enter $label',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onChanged: onChanged,
-          ),
-        const SizedBox(height: 10),
-      ],
-    );
-  }
-
-  Widget _buildDateRangeField(
-    Map<String, dynamic> criteria,
-    StateSetter setState,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Checkbox(
-              value: criteria['use_date'] as bool,
-              onChanged: (val) {
-                setState(() {
-                  criteria['use_date'] = val ?? false;
-                });
-              },
-            ),
-            const Icon(Icons.calendar_today, size: 20),
-            const SizedBox(width: 8),
-            const Text('Date Range'),
-          ],
-        ),
-        if (criteria['use_date'] as bool)
-          Column(
-            children: [
-              TextField(
-                decoration: InputDecoration(
-                  labelText: 'From Date (YYYY-MM-DD)',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                onChanged: (value) => criteria['from_date'] = value,
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                decoration: InputDecoration(
-                  labelText: 'To Date (YYYY-MM-DD)',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                onChanged: (value) => criteria['to_date'] = value,
-              ),
-            ],
-          ),
-      ],
-    );
-  }
-
-  Future<void> _performEnhancedSearch(Map<String, dynamic> criteria) async {
-    if (!ApiService.isConnected) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cannot search while offline'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final result = await MyDocumentsService.enhancedSearch(
-        criteria: criteria,
-        scope: _searchScope,
-      );
-
-      if (result['success'] == true) {
-        final List<Document> searchResults =
-            result['documents'] as List<Document>;
-
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Search Results'),
-            content: Container(
-              width: double.maxFinite,
-              constraints: const BoxConstraints(maxHeight: 400),
-              child: searchResults.isEmpty
-                  ? const Center(child: Text('No documents found'))
-                  : ListView.builder(
-                      itemCount: searchResults.length,
-                      itemBuilder: (context, index) {
-                        final doc = searchResults[index];
-                        return ListTile(
-                          leading: Icon(_getDocumentIcon(doc.type)),
-                          title: Text(doc.name),
-                          subtitle: Text('${doc.owner} • ${doc.uploadDate}'),
-                          onTap: () {
-                            Navigator.pop(context);
-                            setState(() {
-                              _selectedDocument = doc;
-                            });
-                          },
-                        );
-                      },
-                    ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Search failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
+  // ignore: unused_element
   IconData _getDocumentIcon(String type) {
     switch (type.toUpperCase()) {
       case 'PDF':
@@ -1629,19 +1472,31 @@ class _HomePageState extends State<HomePage>
                 onTap: _refreshData,
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.all(4),
+                  height: 42,
+                  width: 42,
                   decoration: BoxDecoration(
                     color: Colors.white.withAlpha(10),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: Colors.white.withAlpha(10),
                       width: 1.5,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color.fromRGBO(187, 186, 186, 1).withAlpha(15),
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  child: Image.asset(
-                    'assets/images/acs-logo.jpeg',
-                    height: 36,
-                    fit: BoxFit.contain,
+                  padding: EdgeInsets.all(4),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.asset(
+                      'assets/images/acs-logo.jpeg',
+                      height: 36,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
               ),
@@ -1651,10 +1506,33 @@ class _HomePageState extends State<HomePage>
         backgroundColor: const Color.fromARGB(255, 43, 65, 189),
         elevation: 0,
         actions: [
-          IconButton(
-            onPressed: _showLogoutDialog,
-            icon: const Icon(Icons.logout, color: Colors.white),
-            tooltip: 'Logout',
+          // IconButton(
+          //   onPressed: _showLogoutDialog,
+          //   icon: const Icon(Icons.logout, color: Colors.white),
+          //   tooltip: 'Logout',
+          // ),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 16),
+              child: CircleAvatar(
+                backgroundColor: Colors.white,
+                radius: 18,
+                child: Text(
+                  _getUserInitial(),
+                  style: const TextStyle(
+                    color: Color.fromARGB(255, 43, 65, 189),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
         bottom: TabBar(
@@ -1669,24 +1547,40 @@ class _HomePageState extends State<HomePage>
           ),
           unselectedLabelStyle: const TextStyle(fontSize: 13),
           tabs: const [
-            Tab(text: 'My Documents'),
-            Tab(text: 'Doc Library'),
-            Tab(text: 'Shared Me'),
-            Tab(text: 'Upload Document'),
+            Tab(text: 'Documents'),
+            Tab(text: 'Library'),
+            Tab(text: 'Shared'),
+            Tab(text: 'Upload'),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Stack(
         children: [
-          _buildMyDocumentsTab(),
-          const DocumentLibrary(),
-          const SharedMeScreen(), // <-- Use SharedMeScreen here
-          UploadDocumentTab(
-            onDocumentUploaded: _addNewDocument,
-            folders: folders,
-            userName: widget.userName,
+          TabBarView(
+            controller: _tabController,
+            children: [
+              _buildMyDocumentsTab(),
+              const DocumentLibrary(),
+              const SharedMeScreen(), // <-- Use SharedMeScreen here
+              UploadDocumentTab(
+                onDocumentUploaded: _addNewDocument,
+                folders: folders,
+                userName: widget.userName,
+              ),
+            ],
           ),
+          if (_showProfileDrawer)
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _showProfileDrawer = false;
+                });
+              },
+              child: Container(color: Colors.black.withAlpha(30)),
+            ),
+
+          // Profile Sidebar
+          if (_showProfileDrawer) _buildProfileSidebar(),
         ],
       ),
     );
@@ -1728,11 +1622,11 @@ class _HomePageState extends State<HomePage>
                               setState(() => _showRecent = false);
                             },
                           ),
-                        IconButton(
-                          icon: const Icon(Icons.tune, color: Colors.indigo),
-                          onPressed: _showEnhancedSearchDialog,
-                          tooltip: 'Advanced Search',
-                        ),
+                        // IconButton(
+                        //   icon: const Icon(Icons.tune, color: Colors.indigo),
+                        //   onPressed: _showEnhancedSearchDialog,
+                        //   tooltip: 'Advanced Search',
+                        // ),
                       ],
                     ),
                     filled: true,
@@ -1812,7 +1706,12 @@ class _HomePageState extends State<HomePage>
 
         const Divider(height: 1),
 
-        Expanded(child: _buildMainContent(filteredDocuments, displayFolders)),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _refreshData,
+            child: _buildMainContent(filteredDocuments, displayFolders),
+          ),
+        ),
       ],
     );
   }
@@ -1925,6 +1824,7 @@ class _HomePageState extends State<HomePage>
     List<Folder> displayFolders,
   ) {
     return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
         children: [
           if (displayFolders.isNotEmpty) _buildFoldersSection(displayFolders),
@@ -2227,6 +2127,7 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  // ignore: unused_element
   String _formatFolderDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
@@ -2281,12 +2182,6 @@ class _HomePageState extends State<HomePage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             GestureDetector(
-              onDoubleTap: () {
-                DocumentOpenerService().handleDoubleTap(
-                  context: context,
-                  document: document,
-                );
-              },
               onTap: () => _showDocumentDetails(document),
               child: Row(
                 children: [
@@ -2513,5 +2408,183 @@ class _HomePageState extends State<HomePage>
           doc.classification.toLowerCase().contains(searchTerm) ||
           doc.folder.toLowerCase().contains(searchTerm);
     }).toList();
+  }
+
+  Widget _buildProfileSidebar() {
+    return Positioned(
+      right: 0,
+      top: 0,
+      bottom: 0,
+      child: Container(
+        width: 300,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(30),
+              blurRadius: 10,
+              offset: const Offset(-2, 0),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            // Header with close button
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: const Color.fromARGB(255, 43, 65, 189),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Profile',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      setState(() {
+                        _showProfileDrawer = false;
+                      });
+                    },
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // User Avatar
+                    CircleAvatar(
+                      backgroundColor: const Color.fromARGB(255, 43, 65, 189),
+                      radius: 50,
+                      child: Text(
+                        _getUserInitial(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // User Name
+                    Text(
+                      widget.userName ?? 'User',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Email
+                    if (widget.userEmail != null &&
+                        widget.userEmail!.isNotEmpty)
+                      Column(
+                        children: [
+                          const SizedBox(height: 20),
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons.email_outlined,
+                                color: Colors.grey,
+                                size: 18,
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                'Email',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.userEmail!,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                    // Experience (Placeholder - you can replace with actual data)
+                    const SizedBox(height: 20),
+                    const Row(
+                      children: [
+                        Icon(Icons.work_outline, color: Colors.grey, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          'Experience',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      '5+ Years', // Replace with actual experience if available
+                      style: TextStyle(fontSize: 16, color: Colors.black87),
+                    ),
+
+                    const Spacer(),
+
+                    // Logout Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          // Close sidebar first
+                          setState(() {
+                            _showProfileDrawer = false;
+                          });
+                          // Show logout confirmation
+                          _showLogoutDialog();
+                        },
+                        icon: const Icon(Icons.logout),
+                        label: const Text(
+                          'Logout',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color.fromARGB(
+                            255,
+                            43,
+                            65,
+                            189,
+                          ),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
