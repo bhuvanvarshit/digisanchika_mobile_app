@@ -16,11 +16,12 @@ import 'package:digi_sanchika/presentations/Screens/document_library.dart';
 import 'package:digi_sanchika/presentations/Screens/upload_document.dart';
 import 'package:digi_sanchika/presentations/Screens/folder_screen.dart';
 import 'package:digi_sanchika/presentations/Screens/shared_me.dart';
-import 'package:digi_sanchika/services/document_opener_service.dart';
 import 'package:open_filex/open_filex.dart';
+// ignore: unused_import
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:digi_sanchika/presentations/Screens/profile_screen.dart';
+import 'package:digi_sanchika/services/document_opener_service.dart';
 
 class HomePage extends StatefulWidget {
   final String? userName;
@@ -38,7 +39,7 @@ class _HomePageState extends State<HomePage>
   final TextEditingController _folderNameController = TextEditingController();
   final TextEditingController _newKeywordController = TextEditingController();
 
-  List<Document> allDocuments = []; // CHANGED: Store ALL documents here
+  List<Document> allDocuments = [];
   List<Folder> folders = [];
   bool _showRecent = false;
   bool _showFolderDropdown = false;
@@ -48,22 +49,15 @@ class _HomePageState extends State<HomePage>
   bool _isUploading = false;
   bool _showProfileDrawer = false;
   int? _currentFolderId;
-  // ignore: unused_field
   Document? _selectedDocument;
-  // String _searchScope = 'my-documents';
+  String? _downloadingFileName;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _loadInitialData();
-
     _initializeBackend();
-
-    // // Show the tip every time user logs in
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   _showDoubleTapDialog();
-    // });
 
     _tabController.addListener(() {
       if (_tabController.index == 1) {
@@ -74,51 +68,11 @@ class _HomePageState extends State<HomePage>
     });
   }
 
-  // Future<void> _showDoubleTapTipOnce() async {
-  //   final prefs = await SharedPreferences.getInstance();
-  //   final hasSeenTip = prefs.getBool('seenDoubleTapTip') ?? false;
-  //   _showDoubleTapDialog();
-  //   // if (!hasSeenTip && mounted) {
-  //   //   _showDoubleTapDialog();
-  //   //   await prefs.setBool('seenDoubleTapTip', true);
-  //   // }
-  // }
-
-  // void _showDoubleTapDialog() {
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) => AlertDialog(
-  //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-  //       title: Row(
-  //         children: [
-  //           const Icon(Icons.touch_app, color: Colors.black, size: 28),
-  //           const SizedBox(width: 12),
-  //           const Text(
-  //             'Quick Tip',
-  //             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-  //           ),
-  //         ],
-  //       ),
-  //       content: const Text(
-  //         'To view any document, simply double-tap the file name.',
-  //         style: TextStyle(fontSize: 16),
-  //       ),
-  //       actions: [
-  //         TextButton(
-  //           onPressed: () => Navigator.pop(context),
-  //           child: const Text('Got it', style: TextStyle(color: Colors.black)),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-  // ADD THE getUserInitial METHOD HERE
   String _getUserInitial() {
     if (widget.userName == null || widget.userName!.isEmpty) {
-      return 'U'; // Default to 'U' for User
+      return 'U';
     }
 
-    // Get the first character of the first word (or first character of the name)
     final nameParts = widget.userName!.trim().split(' ');
     if (nameParts.isNotEmpty) {
       return nameParts[0][0].toUpperCase();
@@ -130,14 +84,14 @@ class _HomePageState extends State<HomePage>
   Future<void> _initializeBackend() async {
     await ApiService.initialize();
     if (ApiService.isConnected) {
-      await _loadAllUserDocuments(); // CHANGED: Use new method
+      await _loadAllUserDocuments();
     }
   }
 
   Future<void> _refreshData() async {
     await ApiService.checkConnection();
     if (ApiService.isConnected) {
-      await _loadAllUserDocuments(); // CHANGED: Use new method
+      await _loadAllUserDocuments();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -151,7 +105,7 @@ class _HomePageState extends State<HomePage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('You’re offline. Showing saved data'),
+            content: Text('You\'re offline. Showing saved data'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -216,7 +170,6 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  // NEW METHOD: Get all folder IDs from /my-folders
   Future<List<int>> _getAllFolderIds() async {
     try {
       final headers = await _createAuthHeaders();
@@ -258,7 +211,6 @@ class _HomePageState extends State<HomePage>
     String folderPath,
   ) {
     return docList.map<Document>((doc) {
-      // Add <Document> type parameter
       return Document(
         id: doc['id'].toString(),
         name: doc['original_filename'],
@@ -272,14 +224,13 @@ class _HomePageState extends State<HomePage>
         allowDownload: doc['allow_download'] ?? true,
         sharingType: doc['is_public'] ? 'Public' : 'Private',
         folder: folderPath,
-        folderId: folderId?.toString(), // Now int? -> String? works
+        folderId: folderId?.toString(),
         path: doc['original_filename'],
         fileType: _extractFileType(doc['original_filename']),
       );
     }).toList();
   }
 
-  // NEW METHOD: Load ALL user documents from all folders
   Future<void> _loadAllUserDocuments() async {
     if (!ApiService.isConnected) {
       if (kDebugMode) {
@@ -297,37 +248,29 @@ class _HomePageState extends State<HomePage>
         print('🔄 Loading ALL user documents...');
       }
 
-      // 1. Get all folder IDs
       List<int> allFolderIds = await _getAllFolderIds();
 
-      // 2. Create batch requests
       List<Future<Map<String, dynamic>>> futures = [];
 
-      // Root request (no folder_id)
       futures.add(_fetchMyDocumentsWithParams(null));
 
-      // Folder requests
       for (int folderId in allFolderIds) {
         futures.add(_fetchMyDocumentsWithParams(folderId));
       }
 
-      // 3. Execute in parallel
       if (kDebugMode) {
         print('🚀 Executing ${futures.length} parallel requests...');
       }
       List<Map<String, dynamic>> results = await Future.wait(futures);
 
-      // 4. Process results
       List<Document> combinedDocuments = [];
       List<Folder> allFolders = [];
 
-      // Process root (index 0)
       if (results.isNotEmpty && results[0]['documents'] != null) {
         combinedDocuments.addAll(
           _convertToDocumentList(results[0]['documents'], null, 'Home'),
         );
 
-        // Get folders from root response
         if (results[0]['folders'] != null) {
           for (var folder in results[0]['folders']) {
             allFolders.add(
@@ -343,7 +286,6 @@ class _HomePageState extends State<HomePage>
         }
       }
 
-      // Process folders (index 1 onwards)
       for (int i = 1; i < results.length; i++) {
         if (results[i]['documents'] != null &&
             results[i]['documents'].isNotEmpty) {
@@ -361,12 +303,10 @@ class _HomePageState extends State<HomePage>
         }
       }
 
-      // 5. Update UI
       setState(() {
         allDocuments = combinedDocuments;
         folders = allFolders;
 
-        // Add Home folder if not present
         if (!folders.any((f) => f.name == 'Home')) {
           folders.insert(
             0,
@@ -387,7 +327,6 @@ class _HomePageState extends State<HomePage>
         }
       });
 
-      // 6. Save to local storage
       try {
         await LocalStorageService.saveDocuments(allDocuments);
         if (kDebugMode) {
@@ -415,7 +354,6 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  // Helper method to fetch documents with parameters
   Future<Map<String, dynamic>> _fetchMyDocumentsWithParams(
     int? folderId,
   ) async {
@@ -458,7 +396,7 @@ class _HomePageState extends State<HomePage>
 
   void _addNewDocument(Document document) async {
     setState(() {
-      allDocuments.add(document); // CHANGED: Use allDocuments
+      allDocuments.add(document);
       _organizeDocumentsIntoFolders();
     });
 
@@ -515,7 +453,6 @@ class _HomePageState extends State<HomePage>
     };
 
     try {
-      // ignore: unnecessary_null_comparison
       if (ApiService.getSessionCookie != null) {
         final cookie = await ApiService.getSessionCookie();
         if (cookie != null && cookie.isNotEmpty) {
@@ -549,7 +486,6 @@ class _HomePageState extends State<HomePage>
         }
       }
 
-      // Remove documents from this folder
       allDocuments.removeWhere((doc) => doc.folder == folderName);
       setState(() {
         folders.removeAt(index);
@@ -618,13 +554,13 @@ class _HomePageState extends State<HomePage>
 
     setState(() {
       _isDownloading = true;
+      _downloadingFileName = document.name;
     });
 
     try {
       final result = await MyDocumentsService.downloadDocument(document.id);
 
       if (result['success'] == true) {
-        // FIXED: Now downloads to app's private directory
         final directory = await getDownloadDirectory();
         final filePath = '${directory.path}/${document.name}';
         final file = File(filePath);
@@ -642,7 +578,6 @@ class _HomePageState extends State<HomePage>
           ),
         );
 
-        // FIXED: Open with FileProvider URI on Android
         try {
           final uriToOpen = Platform.isAndroid
               ? _getFileProviderUri(filePath)
@@ -659,7 +594,6 @@ class _HomePageState extends State<HomePage>
               print('⚠ Could not open file automatically: ${result.message}');
             }
 
-            // Fallback: Try normal path if URI fails
             if (Platform.isAndroid) {
               if (kDebugMode) {
                 print('🔄 Trying fallback with normal path...');
@@ -692,30 +626,26 @@ class _HomePageState extends State<HomePage>
     } finally {
       setState(() {
         _isDownloading = false;
+        _downloadingFileName = null;
       });
     }
   }
 
   Future<Directory> getDownloadDirectory() async {
     if (Platform.isAndroid) {
-      // FIX: Use app's private directory (works without permissions)
       return await getApplicationDocumentsDirectory();
     } else if (Platform.isIOS) {
-      // For iOS, use documents directory
       return await getApplicationDocumentsDirectory();
     }
     return Directory.current;
   }
 
-  // ADD THIS HELPER METHOD RIGHT BEFORE _downloadDocument() method:
   String _getFileProviderUri(String filePath) {
     if (Platform.isAndroid) {
       try {
         final file = File(filePath);
         if (file.existsSync()) {
-          // Get just the filename from the full path
           final fileName = file.path.split('/').last;
-          // Create FileProvider URI format
           return 'content://com.example.digi_sanchika.fileprovider/files/$fileName';
         }
       } catch (e) {
@@ -724,7 +654,6 @@ class _HomePageState extends State<HomePage>
         }
       }
     }
-    // For iOS, return normal path
     return filePath;
   }
 
@@ -745,36 +674,65 @@ class _HomePageState extends State<HomePage>
       if (result['success'] == true) {
         final versions = result['versions'] as List;
 
+        // ignore: use_build_context_synchronously
         showDialog(
-          // ignore: use_build_context_synchronously
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Document Versions'),
-            // ignore: sized_box_for_whitespace
             content: Container(
               width: double.maxFinite,
+              constraints: const BoxConstraints(maxHeight: 400),
               child: ListView.builder(
                 shrinkWrap: true,
                 itemCount: versions.length,
                 itemBuilder: (context, index) {
                   final version = versions[index];
-                  return ListTile(
-                    leading: Icon(
-                      version['is_current']
-                          ? Icons.check_circle
-                          : Icons.history,
-                      color: version['is_current'] ? Colors.green : Colors.grey,
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      leading: Icon(
+                        version['is_current'] == true
+                            ? Icons.check_circle
+                            : Icons.history,
+                        color: version['is_current'] == true
+                            ? Colors.green
+                            : Colors.grey,
+                      ),
+                      title: Text('Version ${version['version_number']}'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Uploaded: ${_formatDate(version['upload_date'])}',
+                          ),
+                          if (version['uploaded_by'] != null)
+                            Text('By: ${version['uploaded_by']}'),
+                        ],
+                      ),
+                      trailing: version['is_current'] == true
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.green.shade100,
+                                ),
+                              ),
+                              child: Text(
+                                'Current',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : null,
                     ),
-                    title: Text('Version ${version['version_number']}'),
-                    subtitle: Text(
-                      'Uploaded: ${_formatDate(version['upload_date'])}',
-                    ),
-                    trailing: version['is_current']
-                        ? const Text(
-                            'Current',
-                            style: TextStyle(color: Colors.green),
-                          )
-                        : null,
                   );
                 },
               ),
@@ -803,7 +761,8 @@ class _HomePageState extends State<HomePage>
 
   String _formatDate(dynamic date) {
     try {
-      return DateTime.parse(date.toString()).toString().split(' ')[0];
+      DateTime parsedDate = DateTime.parse(date.toString());
+      return '${parsedDate.day}/${parsedDate.month}/${parsedDate.year}';
     } catch (e) {
       return date.toString();
     }
@@ -1055,7 +1014,7 @@ class _HomePageState extends State<HomePage>
             allowDownload: details['allow_download'] ?? true,
             sharingType: details['is_public'] ? 'Public' : 'Private',
             folder: details['folder_path'] ?? 'Home',
-            folderId: details['folder_id']?.toString(), // Can be null
+            folderId: details['folder_id']?.toString(),
             path: details['original_filename'],
             fileType: _extractFileType(details['original_filename']),
           );
@@ -1086,25 +1045,6 @@ class _HomePageState extends State<HomePage>
         return 'TXT';
       default:
         return ext.replaceAll('.', '').toUpperCase();
-    }
-  }
-
-  // ignore: unused_element
-  IconData _getDocumentIcon(String type) {
-    switch (type.toUpperCase()) {
-      case 'PDF':
-        return Icons.picture_as_pdf;
-      case 'DOC':
-      case 'DOCX':
-        return Icons.description;
-      case 'XLS':
-      case 'XLSX':
-        return Icons.table_chart;
-      case 'PPT':
-      case 'PPTX':
-        return Icons.slideshow;
-      default:
-        return Icons.insert_drive_file;
     }
   }
 
@@ -1483,13 +1423,18 @@ class _HomePageState extends State<HomePage>
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Color.fromRGBO(187, 186, 186, 1).withAlpha(15),
+                        color: const Color.fromRGBO(
+                          187,
+                          186,
+                          186,
+                          1,
+                        ).withAlpha(15),
                         blurRadius: 4,
-                        offset: Offset(0, 2),
+                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
-                  padding: EdgeInsets.all(4),
+                  padding: const EdgeInsets.all(4),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: Image.asset(
@@ -1506,11 +1451,6 @@ class _HomePageState extends State<HomePage>
         backgroundColor: const Color.fromARGB(255, 43, 65, 189),
         elevation: 0,
         actions: [
-          // IconButton(
-          //   onPressed: _showLogoutDialog,
-          //   icon: const Icon(Icons.logout, color: Colors.white),
-          //   tooltip: 'Logout',
-          // ),
           GestureDetector(
             onTap: () {
               Navigator.push(
@@ -1561,7 +1501,7 @@ class _HomePageState extends State<HomePage>
             children: [
               _buildMyDocumentsTab(),
               const DocumentLibrary(),
-              const SharedMeScreen(), // <-- Use SharedMeScreen here
+              const SharedMeScreen(),
               UploadDocumentTab(
                 onDocumentUploaded: _addNewDocument,
                 folders: folders,
@@ -1622,11 +1562,6 @@ class _HomePageState extends State<HomePage>
                               setState(() => _showRecent = false);
                             },
                           ),
-                        // IconButton(
-                        //   icon: const Icon(Icons.tune, color: Colors.indigo),
-                        //   onPressed: _showEnhancedSearchDialog,
-                        //   tooltip: 'Advanced Search',
-                        // ),
                       ],
                     ),
                     filled: true,
@@ -1692,14 +1627,6 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
               const SizedBox(width: 12),
-              // IconButton(
-              //   onPressed: _refreshData,
-              //   icon: const Icon(Icons.refresh, color: Colors.indigo),
-              //   style: IconButton.styleFrom(
-              //     backgroundColor: Colors.indigo.shade50,
-              //     padding: const EdgeInsets.all(12),
-              //   ),
-              // ),
             ],
           ),
         ),
@@ -1791,7 +1718,7 @@ class _HomePageState extends State<HomePage>
             ),
           ),
         ],
-      ), // CHANGE: Remove semicolon, add comma
+      ),
     );
   }
 
@@ -1815,7 +1742,7 @@ class _HomePageState extends State<HomePage>
             ),
           ),
         ],
-      ), // CHANGE: Remove semicolon, add comma
+      ),
     );
   }
 
@@ -1886,8 +1813,7 @@ class _HomePageState extends State<HomePage>
             height: _showFolderDropdown ? null : 0,
             constraints: BoxConstraints(
               maxHeight: _showFolderDropdown
-                  ? MediaQuery.of(context).size.height *
-                        0.4 // 40% of screen height
+                  ? MediaQuery.of(context).size.height * 0.4
                   : 0,
               minHeight: 0,
             ),
@@ -1916,8 +1842,7 @@ class _HomePageState extends State<HomePage>
                           )
                         : ListView.builder(
                             shrinkWrap: true,
-                            physics:
-                                const BouncingScrollPhysics(), // ✅ ENABLED SCROLLING
+                            physics: const BouncingScrollPhysics(),
                             itemCount: displayFolders.length,
                             itemBuilder: (context, index) {
                               return _buildFolderListItem(
@@ -1977,7 +1902,7 @@ class _HomePageState extends State<HomePage>
                       ? Icons.arrow_drop_up
                       : Icons.arrow_drop_down,
                   color: Colors.indigo,
-                  size: 32, // 👈 Match folders size
+                  size: 32,
                 ),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -1986,7 +1911,6 @@ class _HomePageState extends State<HomePage>
           ),
           const SizedBox(height: 16),
 
-          // Only show documents when expanded
           _showDocumentsDropdown
               ? (filteredDocuments.isEmpty
                     ? _buildEmptyState()
@@ -2063,14 +1987,6 @@ class _HomePageState extends State<HomePage>
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      // const SizedBox(height: 4),
-                      // Text(
-                      //   '${folder.documents.length} document${folder.documents.length != 1 ? 's' : ''} • Created ${_formatFolderDate(folder.createdAt)}',
-                      //   style: TextStyle(
-                      //     fontSize: 12,
-                      //     color: Colors.grey.shade600,
-                      //   ),
-                      // ),
                     ],
                   ),
                 ),
@@ -2127,25 +2043,6 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // ignore: unused_element
-  String _formatFolderDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inDays == 0) {
-      return 'today';
-    } else if (difference.inDays == 1) {
-      return 'yesterday';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} days ago';
-    } else if (difference.inDays < 30) {
-      final weeks = (difference.inDays / 7).floor();
-      return '${weeks} week${weeks > 1 ? 's' : ''} ago';
-    } else {
-      return '${date.day}/${date.month}/${date.year}';
-    }
-  }
-
   Widget _buildDocumentCard(Document document, int index) {
     final docIcons = {
       'PDF': Icons.picture_as_pdf,
@@ -2172,18 +2069,25 @@ class _HomePageState extends State<HomePage>
     IconData icon = docIcons[fileType] ?? Icons.insert_drive_file;
     Color color = docColors[fileType] ?? Colors.indigo;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              onTap: () => _showDocumentDetails(document),
-              child: Row(
+    // Get document opener service instance
+    final documentOpener = DocumentOpenerService();
+
+    return InkWell(
+      onTap: () => documentOpener.handleDoubleTap(
+        context: context,
+        document: document,
+      ), // SINGLE TAP TO OPEN DOCUMENT
+      borderRadius: BorderRadius.circular(12),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -2218,67 +2122,100 @@ class _HomePageState extends State<HomePage>
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 16),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
-            _buildDetailRow('Type', document.type, Icons.category),
-            _buildDetailRow('Keyword', document.keyword, Icons.label),
-            _buildDetailRow(
-              'Upload Date',
-              document.uploadDate,
-              Icons.calendar_today,
-            ),
-            _buildDetailRow('Owner', document.owner, Icons.person),
-            _buildDetailRow('Folder', document.folder, Icons.folder),
-            _buildDetailRow(
-              'Classification',
-              document.classification,
-              Icons.security,
-            ),
-            _buildDetailRow('Sharing', document.sharingType, Icons.share),
-            if (document.details.isNotEmpty)
-              _buildDetailRow('Details', document.details, Icons.info_outline),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _downloadDocument(document),
-                    icon: const Padding(
-                      padding: EdgeInsets.only(left: 4),
-                      child: Icon(Icons.download, size: 14),
-                    ),
-                    label: const Padding(
-                      padding: EdgeInsets.only(right: 6),
-                      child: Text('Download', style: TextStyle(fontSize: 11)),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green,
-                      side: const BorderSide(color: Colors.green),
-                      padding: const EdgeInsets.symmetric(vertical: 6),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              _buildDetailRow('Type', document.type, Icons.category),
+              _buildDetailRow('Keyword', document.keyword, Icons.label),
+              _buildDetailRow(
+                'Upload Date',
+                document.uploadDate,
+                Icons.calendar_today,
+              ),
+              _buildDetailRow('Owner', document.owner, Icons.person),
+              _buildDetailRow('Folder', document.folder, Icons.folder),
+              _buildDetailRow(
+                'Classification',
+                document.classification,
+                Icons.security,
+              ),
+              _buildDetailRow('Sharing', document.sharingType, Icons.share),
+              if (document.details.isNotEmpty)
+                _buildDetailRow(
+                  'Details',
+                  document.details,
+                  Icons.info_outline,
+                ),
+              const SizedBox(height: 16),
+
+              // ACTION BUTTONS ROW - Updated with View button
+              Row(
+                children: [
+                  // VIEW BUTTON - opens the document (same as single tap)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => documentOpener.handleDoubleTap(
+                        context: context,
+                        document: document,
+                      ),
+                      icon: const Icon(Icons.visibility, size: 18),
+                      label: const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Text('View', style: TextStyle(fontSize: 12)),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.purple,
+                        side: const BorderSide(color: Colors.purple),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showDocumentVersions(document),
-                    icon: const Icon(Icons.history, size: 18),
-                    label: const Padding(
-                      padding: EdgeInsets.only(right: 6),
-                      child: Text('Versions', style: TextStyle(fontSize: 12)),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.blue,
-                      side: const BorderSide(color: Colors.blue),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+
+                  const SizedBox(width: 8),
+
+                  // VERSIONS BUTTON - shows document versions
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showDocumentVersions(document),
+                      icon: const Icon(Icons.history, size: 18),
+                      label: const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Text('Versions', style: TextStyle(fontSize: 12)),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        side: const BorderSide(color: Colors.blue),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
+
+                  const SizedBox(width: 8),
+
+                  // DOWNLOAD BUTTON
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _downloadDocument(document),
+                      icon: const Padding(
+                        padding: EdgeInsets.only(left: 4),
+                        child: Icon(Icons.download, size: 14),
+                      ),
+                      label: const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: Text('Download', style: TextStyle(fontSize: 11)),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.green,
+                        side: const BorderSide(color: Colors.green),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // SHARE BUTTON
+                  OutlinedButton.icon(
                     onPressed: () => _showShareDialog(document),
                     icon: const Icon(Icons.share, size: 18),
                     label: const Text('Share'),
@@ -2288,19 +2225,48 @@ class _HomePageState extends State<HomePage>
                       padding: const EdgeInsets.symmetric(vertical: 8),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: () => _showDeleteConfirmation(context, index),
-                  icon: const Icon(Icons.delete, color: Colors.red),
-                  style: IconButton.styleFrom(
-                    side: const BorderSide(color: Colors.red),
+
+                  const SizedBox(width: 8),
+
+                  // DELETE BUTTON (icon only)
+                  IconButton(
+                    onPressed: () => _showDeleteConfirmation(context, index),
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    style: IconButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: Colors.indigo),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2334,61 +2300,8 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  Widget _buildDetailRow(String label, String value, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 16, color: Colors.indigo),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 100,
-            child: Text(
-              '$label:',
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Widget _buildSharedMeTab() {
-  //   return const Center(
-  //     child: Column(
-  //       mainAxisAlignment: MainAxisAlignment.center,
-  //       children: [
-  //         Icon(Icons.construction, size: 80, color: Colors.grey),
-  //         SizedBox(height: 20),
-  //         Text(
-  //           'Shared Me',
-  //           style: TextStyle(
-  //             fontSize: 24,
-  //             fontWeight: FontWeight.bold,
-  //             color: Colors.indigo,
-  //           ),
-  //         ),
-  //         SizedBox(height: 10),
-  //         Text(
-  //           'Coming Soon',
-  //           style: TextStyle(fontSize: 16, color: Colors.grey),
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
-
   List<Document> _getFilteredDocuments() {
-    List<Document> allDocs = List.from(
-      allDocuments,
-    ); // CHANGED: Use allDocuments
+    List<Document> allDocs = List.from(allDocuments);
 
     if (_showRecent) {
       allDocs.sort((a, b) => b.uploadDate.compareTo(a.uploadDate));
@@ -2429,7 +2342,6 @@ class _HomePageState extends State<HomePage>
         ),
         child: Column(
           children: [
-            // Header with close button
             Container(
               padding: const EdgeInsets.all(16),
               color: const Color.fromARGB(255, 43, 65, 189),
@@ -2462,7 +2374,6 @@ class _HomePageState extends State<HomePage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // User Avatar
                     CircleAvatar(
                       backgroundColor: const Color.fromARGB(255, 43, 65, 189),
                       radius: 50,
@@ -2478,7 +2389,6 @@ class _HomePageState extends State<HomePage>
 
                     const SizedBox(height: 20),
 
-                    // User Name
                     Text(
                       widget.userName ?? 'User',
                       style: const TextStyle(
@@ -2489,7 +2399,6 @@ class _HomePageState extends State<HomePage>
 
                     const SizedBox(height: 8),
 
-                    // Email
                     if (widget.userEmail != null &&
                         widget.userEmail!.isNotEmpty)
                       Column(
@@ -2523,7 +2432,6 @@ class _HomePageState extends State<HomePage>
                         ],
                       ),
 
-                    // Experience (Placeholder - you can replace with actual data)
                     const SizedBox(height: 20),
                     const Row(
                       children: [
@@ -2540,22 +2448,19 @@ class _HomePageState extends State<HomePage>
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      '5+ Years', // Replace with actual experience if available
+                      '5+ Years',
                       style: TextStyle(fontSize: 16, color: Colors.black87),
                     ),
 
                     const Spacer(),
 
-                    // Logout Button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          // Close sidebar first
                           setState(() {
                             _showProfileDrawer = false;
                           });
-                          // Show logout confirmation
                           _showLogoutDialog();
                         },
                         icon: const Icon(Icons.logout),

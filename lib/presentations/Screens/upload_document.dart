@@ -1192,6 +1192,95 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
     _loadFolders();
   }
 
+  // ============ ADD THIS CONSTANT HERE ============
+  static const List<String> _allSupportedExtensions = [
+    // ============ Legacy Office ============
+    'doc', 'xls', 'ppt', 'rtf', 'mdb', 'pub', 'pps', 'dot', 'xlt', 'pot',
+
+    // ============ Modern Office ============
+    'docx', 'xlsx', 'pptx', 'dotx', 'xltx', 'potx', 'accdb', 'one',
+
+    // ============ OpenDocument Format ============
+    'odt', 'ods', 'odp', 'odg', 'odf',
+
+    // ============ Apple iWork ============
+    'pages', 'numbers', 'key',
+
+    // ============ PDFs ============
+    'pdf',
+
+    // ============ Text Files ============
+    'txt', 'md', 'markdown',
+
+    // ============ CSV/Data Files ============
+    'csv', 'tsv', 'xml', 'json',
+
+    // ============ ZIP & Archives ============
+    'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso',
+
+    // ============ Audio Files ============
+    'mp3',
+    'wav',
+    'ogg',
+    'flac',
+    'aac',
+    'm4a',
+    'wma',
+    'opus',
+    'mid',
+    'midi',
+    'aiff',
+    'au',
+
+    // ============ Video Files ============
+    'mp4',
+    'mov',
+    'avi',
+    'mkv',
+    'flv',
+    'wmv',
+    'webm',
+    'm4v',
+    'mpg',
+    'mpeg',
+    '3gp',
+    'mts',
+    'vob',
+    'ogv',
+
+    // ============ Code Files ============
+    // Python
+    'py', 'pyc', 'pyo', 'pyd',
+
+    // JavaScript/TypeScript/React/Node.js
+    'js', 'jsx', 'ts', 'tsx', 'node', 'njs',
+
+    // HTML/CSS
+    'html', 'htm', 'css', 'scss', 'sass', 'less',
+
+    // Database
+    'sql', 'db', 'sqlite', 'sqlite3', 'mdb', 'accdb', 'frm', 'myd', 'myi',
+
+    // Other programming languages
+    'java', 'class', 'jar', 'c', 'cpp', 'cc', 'cxx', 'h', 'hpp', 'hxx',
+    'cs', 'php', 'phtml', 'rb', 'erb', 'go', 'rs', 'swift', 'kt', 'kts', 'dart',
+
+    // Shell/Bash
+    'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd',
+
+    // Configuration Files
+    'env', 'config', 'toml', 'ini', 'yaml', 'yml',
+
+    // ============ JSON Files ============
+    'json', 'jsonl', 'jsonc',
+
+    // ============ Google Files ============
+    'gdoc', 'gsheet', 'gslides', 'gdraw',
+
+    // ============ Other Important ============
+    'log', 'lock', 'license', 'readme', 'gitignore', 'dockerfile', 'makefile',
+  ];
+
   // ============ FOLDER MANAGEMENT ============
   Future<void> _loadFolders() async {
     setState(() => _foldersLoading = true);
@@ -1524,31 +1613,22 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
     });
   }
 
-  // ============ FILE PICKING METHODS ============
-  Future<void> _pickSingleFile() async {
+  // Add this new method
+  Future<void> _pickImageFile() async {
     try {
       setState(() => _isLoading = true);
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: [
-          'pdf',
-          'docx',
-          'doc',
-          'xlsx',
-          'xls',
-          'pptx',
-          'ppt',
-          'txt',
-        ],
+        type: FileType.image, // This will show images
+        allowMultiple: false,
       );
 
       if (result != null && result.files.isNotEmpty && mounted) {
         PlatformFile file = result.files.first;
 
-        if (file.size > 10 * 1024 * 1024) {
+        if (file.size > 500 * 1024 * 1024) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('File "${file.name}" exceeds 10MB limit'),
+              content: Text('Image "${file.name}" exceeds 500MB limit'),
               backgroundColor: Colors.red,
             ),
           );
@@ -1560,9 +1640,305 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
         });
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('Image picker error: $e');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error picking file: $e'),
+          content: Text('Error picking image: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  // Keep your original _pickSingleFile for other files
+
+  Future<void> _pickSingleFile() async {
+    try {
+      setState(() => _isLoading = true);
+
+      // Show a dialog to select file type
+      String? fileType = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Select File Type'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.audio_file),
+                title: const Text('Audio Files'),
+                onTap: () => Navigator.pop(context, 'audio'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.video_file),
+                title: const Text('Video Files'),
+                onTap: () => Navigator.pop(context, 'video'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.image),
+                title: const Text('Image Files'),
+                onTap: () => Navigator.pop(context, 'image'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.description),
+                title: const Text('Document Files'),
+                onTap: () => Navigator.pop(context, 'document'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.code),
+                title: const Text('Code Files'),
+                onTap: () => Navigator.pop(context, 'code'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file),
+                title: const Text('All Files'),
+                onTap: () => Navigator.pop(context, 'all'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      if (fileType == null) return;
+
+      FilePickerResult? result;
+
+      switch (fileType) {
+        case 'audio':
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.audio,
+            allowMultiple: false,
+          );
+          break;
+        case 'video':
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.video,
+            allowMultiple: false,
+          );
+          break;
+        case 'image':
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.image,
+            allowMultiple: false,
+          );
+          break;
+        case 'document':
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: [
+              // Legacy Office
+              'doc',
+              'xls',
+              'ppt',
+              'rtf',
+              'mdb',
+              'pub',
+              'pps',
+              'dot',
+              'xlt',
+              'pot',
+              // Modern Office
+              'docx', 'xlsx', 'pptx', 'dotx', 'xltx', 'potx', 'accdb', 'one',
+              // OpenDocument
+              'odt', 'ods', 'odp', 'odg', 'odf',
+              // Apple iWork
+              'pages', 'numbers', 'key',
+              // PDFs
+              'pdf',
+              // Text Files
+              'txt', 'md', 'markdown',
+              // CSV/Data
+              'csv', 'tsv', 'xml', 'json',
+              // ZIP & Archives
+              'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso',
+              // Google Files
+              'gdoc', 'gsheet', 'gslides', 'gdraw',
+            ],
+            allowMultiple: false,
+          );
+          break;
+        case 'code':
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: [
+              'doc', 'docx', 'dot', 'dotx', 'gdoc',
+              // Python
+              'py',
+              'pyc',
+              'pyo',
+              'pyd',
+              // JavaScript/TypeScript/React/Node.js
+              'js',
+              'jsx',
+              'ts',
+              'tsx',
+              'node',
+              'njs',
+              // HTML/CSS
+              'html', 'htm', 'css', 'scss', 'sass', 'less',
+              // Database
+              'sql',
+              'db',
+              'sqlite',
+              'sqlite3',
+              'mdb',
+              'accdb',
+              'frm',
+              'myd',
+              'myi',
+              // Other programming languages
+              'java',
+              'class',
+              'jar',
+              'c',
+              'cpp',
+              'cc',
+              'cxx',
+              'h',
+              'hpp',
+              'hxx',
+              'cs',
+              'php',
+              'phtml',
+              'rb',
+              'erb',
+              'go',
+              'rs',
+              'swift',
+              'kt',
+              'kts',
+              'dart',
+              // Shell/Bash
+              'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd',
+              // Configuration Files
+              'env', 'config', 'toml', 'ini', 'yaml', 'yml',
+              // JSON Files
+              'json', 'jsonl', 'jsonc',
+              // Other Code Files
+              'log',
+              'lock',
+              'license',
+              'readme',
+              'gitignore',
+              'dockerfile',
+              'makefile',
+            ],
+            allowMultiple: false,
+          );
+          break;
+        case 'all':
+        default:
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: _allSupportedExtensions,
+            allowMultiple: false,
+          );
+          break;
+      }
+
+      if (result != null && result.files.isNotEmpty && mounted) {
+        PlatformFile file = result.files.first;
+
+        // 🚨 CRITICAL DEBUG INFO 🚨
+        if (kDebugMode) {
+          print('📄 ===== FILE PICKER DEBUG =====');
+          print('📄 File name: ${file.name}');
+          print('📄 File path: ${file.path}');
+          print('📄 File size: ${file.size} bytes');
+          print(
+            '📄 File extension: ${file.name.split('.').last.toLowerCase()}',
+          );
+          print('📄 Full file name parts: ${file.name.split('.')}');
+
+          // Check if path exists and file is readable
+          if (file.path != null) {
+            final fileObj = File(file.path!);
+            print('📄 File exists: ${fileObj.existsSync()}');
+            print('📄 File is readable: ${fileObj.existsSync()}');
+            print('📄 File absolute path: ${fileObj.absolute.path}');
+          } else {
+            print('❌ File path is NULL!');
+          }
+          print('📄 ===== END DEBUG =====');
+        }
+
+        // Check for Google Docs specific files
+        final extension = file.name.split('.').last.toLowerCase();
+        if (['gdoc', 'gsheet', 'gslides'].contains(extension)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '⚠️ Google Drive files (.gdoc, .gsheet) are links, not actual documents. '
+                'Export as PDF or DOCX first.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+
+        if (file.size > 500 * 1024 * 1024) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('File "${file.name}" exceeds 500MB limit'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        // Check if file path is valid
+        if (file.path == null || file.path!.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Cannot access file "${file.name}". Please try again.',
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        // Check if file actually exists
+        final fileObj = File(file.path!);
+        if (!fileObj.existsSync()) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('File "${file.name}" not found or inaccessible.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        setState(() {
+          _uploadedFiles.add(file);
+        });
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ Selected: ${file.name}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('File picker error: $e');
+        print('Error details: ${e.toString()}');
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error picking file: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -1577,41 +1953,398 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
     try {
       setState(() => _isLoading = true);
 
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: [
-          'pdf',
-          'docx',
-          'doc',
-          'xlsx',
-          'xls',
-          'pptx',
-          'ppt',
-          'txt',
-        ],
-        allowMultiple: true,
+      // Show a dialog to select file type
+      String? fileType = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Select File Type'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.audio_file),
+                title: const Text('Audio Files'),
+                onTap: () => Navigator.pop(context, 'audio'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.video_file),
+                title: const Text('Video Files'),
+                onTap: () => Navigator.pop(context, 'video'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.image),
+                title: const Text('Image Files'),
+                onTap: () => Navigator.pop(context, 'image'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.description),
+                title: const Text('Document Files'),
+                onTap: () => Navigator.pop(context, 'document'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.code),
+                title: const Text('Code Files'),
+                onTap: () => Navigator.pop(context, 'code'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.insert_drive_file),
+                title: const Text('All Files'),
+                onTap: () => Navigator.pop(context, 'all'),
+              ),
+            ],
+          ),
+        ),
       );
 
+      if (fileType == null) return;
+
+      FilePickerResult? result;
+      List<String> selectedExtensions = [];
+
+      switch (fileType) {
+        case 'audio':
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.audio,
+            allowMultiple: true,
+          );
+          selectedExtensions = [
+            'mp3',
+            'wav',
+            'ogg',
+            'flac',
+            'aac',
+            'm4a',
+            'wma',
+            'opus',
+            'mid',
+            'midi',
+            'aiff',
+            'au',
+          ];
+          break;
+        case 'video':
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.video,
+            allowMultiple: true,
+          );
+          selectedExtensions = [
+            'mp4',
+            'mov',
+            'avi',
+            'mkv',
+            'flv',
+            'wmv',
+            'webm',
+            'm4v',
+            'mpg',
+            'mpeg',
+            '3gp',
+            'mts',
+            'vob',
+            'ogv',
+          ];
+          break;
+        case 'image':
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.image,
+            allowMultiple: true,
+          );
+          selectedExtensions = [
+            'jpg',
+            'jpeg',
+            'png',
+            'gif',
+            'bmp',
+            'webp',
+            'svg',
+            'tiff',
+            'tif',
+            'ico',
+            'heic',
+            'heif',
+            'raw',
+            'cr2',
+            'nef',
+            'orf',
+            'sr2',
+          ];
+          break;
+        case 'document':
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: [
+              // Legacy Office
+              'doc',
+              'xls',
+              'ppt',
+              'rtf',
+              'mdb',
+              'pub',
+              'pps',
+              'dot',
+              'xlt',
+              'pot',
+              // Modern Office
+              'docx', 'xlsx', 'pptx', 'dotx', 'xltx', 'potx', 'accdb', 'one',
+              // OpenDocument
+              'odt', 'ods', 'odp', 'odg', 'odf',
+              // Apple iWork
+              'pages', 'numbers', 'key',
+              // PDFs
+              'pdf',
+              // Text Files
+              'txt', 'md', 'markdown',
+              // CSV/Data
+              'csv', 'tsv', 'xml', 'json',
+              // ZIP & Archives
+              'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso',
+              // Google Files
+              'gdoc', 'gsheet', 'gslides', 'gdraw',
+            ],
+            allowMultiple: true,
+          );
+          selectedExtensions = [
+            'doc',
+            'xls',
+            'ppt',
+            'rtf',
+            'mdb',
+            'pub',
+            'pps',
+            'dot',
+            'xlt',
+            'pot',
+            'docx',
+            'xlsx',
+            'pptx',
+            'dotx',
+            'xltx',
+            'potx',
+            'accdb',
+            'one',
+            'odt',
+            'ods',
+            'odp',
+            'odg',
+            'odf',
+            'pages',
+            'numbers',
+            'key',
+            'pdf',
+            'txt',
+            'md',
+            'markdown',
+            'csv',
+            'tsv',
+            'xml',
+            'json',
+            'zip',
+            'rar',
+            '7z',
+            'tar',
+            'gz',
+            'bz2',
+            'xz',
+            'iso',
+            'gdoc',
+            'gsheet',
+            'gslides',
+            'gdraw',
+          ];
+          break;
+        case 'code':
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: [
+              // Python
+              'py', 'pyc', 'pyo', 'pyd',
+              // JavaScript/TypeScript/React/Node.js
+              'js', 'jsx', 'ts', 'tsx', 'node', 'njs',
+              // HTML/CSS
+              'html', 'htm', 'css', 'scss', 'sass', 'less',
+              // Database
+              'sql',
+              'db',
+              'sqlite',
+              'sqlite3',
+              'mdb',
+              'accdb',
+              'frm',
+              'myd',
+              'myi',
+              // Other programming languages
+              'java',
+              'class',
+              'jar',
+              'c',
+              'cpp',
+              'cc',
+              'cxx',
+              'h',
+              'hpp',
+              'hxx',
+              'cs',
+              'php',
+              'phtml',
+              'rb',
+              'erb',
+              'go',
+              'rs',
+              'swift',
+              'kt',
+              'kts',
+              'dart',
+              // Shell/Bash
+              'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd',
+              // Configuration Files
+              'env', 'config', 'toml', 'ini', 'yaml', 'yml',
+              // JSON Files
+              'json', 'jsonl', 'jsonc',
+              // Other Code Files
+              'log',
+              'lock',
+              'license',
+              'readme',
+              'gitignore',
+              'dockerfile',
+              'makefile',
+            ],
+            allowMultiple: true,
+          );
+          selectedExtensions = [
+            'py',
+            'pyc',
+            'pyo',
+            'pyd',
+            'js',
+            'jsx',
+            'ts',
+            'tsx',
+            'node',
+            'njs',
+            'html',
+            'htm',
+            'css',
+            'scss',
+            'sass',
+            'less',
+            'sql',
+            'db',
+            'sqlite',
+            'sqlite3',
+            'mdb',
+            'accdb',
+            'frm',
+            'myd',
+            'myi',
+            'java',
+            'class',
+            'jar',
+            'c',
+            'cpp',
+            'cc',
+            'cxx',
+            'h',
+            'hpp',
+            'hxx',
+            'cs',
+            'php',
+            'phtml',
+            'rb',
+            'erb',
+            'go',
+            'rs',
+            'swift',
+            'kt',
+            'kts',
+            'dart',
+            'sh',
+            'bash',
+            'zsh',
+            'fish',
+            'ps1',
+            'bat',
+            'cmd',
+            'env',
+            'config',
+            'toml',
+            'ini',
+            'yaml',
+            'yml',
+            'json',
+            'jsonl',
+            'jsonc',
+            'log',
+            'lock',
+            'license',
+            'readme',
+            'gitignore',
+            'dockerfile',
+            'makefile',
+          ];
+          break;
+        case 'all':
+        default:
+          result = await FilePicker.platform.pickFiles(
+            type: FileType.custom,
+            allowedExtensions: _allSupportedExtensions,
+            allowMultiple: true,
+          );
+          selectedExtensions = _allSupportedExtensions;
+          break;
+      }
+
       if (result != null && result.files.isNotEmpty && mounted) {
+        int addedFiles = 0;
+        int skippedFiles = 0;
+
         for (var file in result.files) {
-          if (file.size > 10 * 1024 * 1024) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('File "${file.name}" exceeds 10MB limit'),
-                backgroundColor: Colors.red,
-              ),
-            );
-            continue;
+          // Check file extension
+          final extension = file.name.split('.').last.toLowerCase();
+
+          // Only add files with allowed extensions
+          if (fileType == 'all' || selectedExtensions.contains(extension)) {
+            // Check file size (500MB limit)
+            if (file.size > 500 * 1024 * 1024) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('File "${file.name}" exceeds 500MB limit'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              skippedFiles++;
+              continue;
+            }
+
+            setState(() {
+              _uploadedFiles.add(file);
+            });
+            addedFiles++;
+          } else {
+            skippedFiles++;
           }
-          setState(() {
-            _uploadedFiles.add(file);
-          });
+        }
+
+        // Show summary
+        if (addedFiles > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '✅ Added $addedFiles file(s)${skippedFiles > 0 ? ' (skipped $skippedFiles)' : ''}',
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
         }
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('Multiple file picker error: $e');
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error picking files: $e'),
+          content: Text('Error picking files: ${e.toString()}'),
           backgroundColor: Colors.red,
         ),
       );
@@ -1621,6 +2354,244 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
       }
     }
   }
+
+  // Future<void> _pickMultipleFiles() async {
+  //   try {
+  //     setState(() => _isLoading = true);
+  //     // Show a dialog to select file type
+  //     String? fileType = await showDialog<String>(
+  //       context: context,
+  //       builder: (context) => AlertDialog(
+  //         title: const Text('Select File Type'),
+  //         content: Column(
+  //           mainAxisSize: MainAxisSize.min,
+  //           children: [
+  //             ListTile(
+  //               leading: const Icon(Icons.audio_file),
+  //               title: const Text('Audio Files'),
+  //               onTap: () => Navigator.pop(context, 'audio'),
+  //             ),
+  //             ListTile(
+  //               leading: const Icon(Icons.video_file),
+  //               title: const Text('Video Files'),
+  //               onTap: () => Navigator.pop(context, 'video'),
+  //             ),
+  //             ListTile(
+  //               leading: const Icon(Icons.image),
+  //               title: const Text('Image Files'),
+  //               onTap: () => Navigator.pop(context, 'image'),
+  //             ),
+  //             ListTile(
+  //               leading: const Icon(Icons.description),
+  //               title: const Text('Document Files'),
+  //               onTap: () => Navigator.pop(context, 'document'),
+  //             ),
+  //             ListTile(
+  //               leading: const Icon(Icons.insert_drive_file),
+  //               title: const Text('All Files'),
+  //               onTap: () => Navigator.pop(context, 'all'),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+  //     );
+
+  //     if (fileType == null) return;
+
+  //     // FilePickerResult? result = await FilePicker.platform.pickFiles(
+  //     //   type: FileType.custom,
+  //     //   allowedExtensions: [
+  //     //     'pdf',
+  //     //     'doc',
+  //     //     'docx',
+  //     //     'xls',
+  //     //     'xlsx',
+  //     //     'ppt',
+  //     //     'pptx',
+  //     //     'txt',
+  //     //     'jpg',
+  //     //     'jpeg',
+  //     //     'png',
+  //     //   ],
+  //     // );
+  //     FilePickerResult? result;
+  //     List<String> selectedExtensions = [];
+
+  //     switch (fileType) {
+  //       case 'audio':
+  //         result = await FilePicker.platform.pickFiles(
+  //           type: FileType.audio,
+  //           allowMultiple: true,
+  //         );
+  //         selectedExtensions = ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'];
+  //         break;
+  //       case 'video':
+  //         result = await FilePicker.platform.pickFiles(
+  //           type: FileType.video,
+  //           allowMultiple: true,
+  //         );
+  //         selectedExtensions = [
+  //           'mp4',
+  //           'mov',
+  //           'avi',
+  //           'mkv',
+  //           'flv',
+  //           'wmv',
+  //           'webm',
+  //         ];
+  //         break;
+  //       case 'image':
+  //         result = await FilePicker.platform.pickFiles(
+  //           type: FileType.image,
+  //           allowMultiple: true,
+  //         );
+  //         selectedExtensions = [
+  //           'jpg',
+  //           'jpeg',
+  //           'png',
+  //           'gif',
+  //           'bmp',
+  //           'webp',
+  //           'svg',
+  //         ];
+  //         break;
+  //       case 'document':
+  //         result = await FilePicker.platform.pickFiles(
+  //           type: FileType.custom,
+  //           allowedExtensions: [
+  //             'pdf',
+  //             'doc',
+  //             'docx',
+  //             'xls',
+  //             'xlsx',
+  //             'ppt',
+  //             'pptx',
+  //             'txt',
+  //           ],
+  //           allowMultiple: true,
+  //         );
+  //         selectedExtensions = [
+  //           'pdf',
+  //           'doc',
+  //           'docx',
+  //           'xls',
+  //           'xlsx',
+  //           'ppt',
+  //           'pptx',
+  //           'txt',
+  //         ];
+  //         break;
+  //       case 'all':
+  //       default:
+  //         result = await FilePicker.platform.pickFiles(
+  //           type: FileType.custom,
+  //           allowedExtensions: [
+  //             // Audio
+  //             'mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac',
+  //             // Video
+  //             'mp4', 'mov', 'avi', 'mkv', 'flv', 'wmv', 'webm',
+  //             // Images
+  //             'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg',
+  //             // Documents
+  //             'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt',
+  //             // Archives
+  //             'zip', 'rar', '7z', 'tar', 'gz',
+  //           ],
+  //           allowMultiple: true,
+  //         );
+  //         selectedExtensions = [
+  //           'mp3',
+  //           'wav',
+  //           'ogg',
+  //           'm4a',
+  //           'flac',
+  //           'aac',
+  //           'mp4',
+  //           'mov',
+  //           'avi',
+  //           'mkv',
+  //           'flv',
+  //           'wmv',
+  //           'webm',
+  //           'jpg',
+  //           'jpeg',
+  //           'png',
+  //           'gif',
+  //           'bmp',
+  //           'webp',
+  //           'svg',
+  //           'pdf',
+  //           'doc',
+  //           'docx',
+  //           'xls',
+  //           'xlsx',
+  //           'ppt',
+  //           'pptx',
+  //           'txt',
+  //           'zip',
+  //           'rar',
+  //           '7z',
+  //           'tar',
+  //           'gz',
+  //         ];
+  //         break;
+  //     }
+
+  //     if (result != null && result.files.isNotEmpty && mounted) {
+  //       int addedFiles = 0;
+  //       int skippedFiles = 0;
+
+  //       for (var file in result.files) {
+  //         // Increased size limit from 10MB to 500MB for all file types
+  //         final extension = file.name.split('.').last.toLowerCase();
+
+  //         // Only add files with allowed extensions
+  //         if (fileType == 'all' || selectedExtensions.contains(extension)) {
+  //           if (file.size > 500 * 1024 * 1024) {
+  //             ScaffoldMessenger.of(context).showSnackBar(
+  //               SnackBar(
+  //                 content: Text('File "${file.name}" exceeds 500MB limit'),
+  //                 backgroundColor: Colors.red,
+  //               ),
+  //             );
+  //             continue;
+  //           }
+  //           setState(() {
+  //             _uploadedFiles.add(file);
+  //           });
+  //           addedFiles++;
+  //         } else {
+  //           skippedFiles++;
+  //         }
+  //       }
+  //       if (addedFiles > 0) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(
+  //             content: Text(
+  //               '✅ Added $addedFiles file(s)${skippedFiles > 0 ? ' (skipped $skippedFiles)' : ''}',
+  //             ),
+  //             backgroundColor: Colors.green,
+  //             duration: const Duration(seconds: 3),
+  //           ),
+  //         );
+  //       }
+  //     }
+  //   } catch (e) {
+  //     if (kDebugMode) {
+  //       print('Multiple file picker error: $e');
+  //     }
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: Text('Error picking files: ${e.toString()}'),
+  //         backgroundColor: Colors.red,
+  //       ),
+  //     );
+  //   } finally {
+  //     if (mounted) {
+  //       setState(() => _isLoading = false);
+  //     }
+  //   }
+  // }
 
   Future<void> _pickFolder() async {
     try {
@@ -1657,19 +2628,195 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
   IconData _getFileIcon(String fileName) {
     final extension = fileName.split('.').last.toLowerCase();
     switch (extension) {
+      // Documents
       case 'pdf':
         return Icons.picture_as_pdf;
       case 'docx':
       case 'doc':
+      case 'dot':
+      case 'dotx':
         return Icons.description;
       case 'xlsx':
       case 'xls':
+      case 'csv':
+      case 'ods':
         return Icons.table_chart;
       case 'pptx':
       case 'ppt':
+      case 'odp':
         return Icons.slideshow;
       case 'txt':
+      case 'rtf':
+      case 'md':
+      case 'odt':
         return Icons.text_fields;
+
+      // Programming Files - JavaScript/TypeScript
+      case 'js':
+      case 'jsx':
+        return Icons.code;
+      case 'ts':
+      case 'tsx':
+        return Icons.data_object;
+      case 'json':
+        return Icons.data_array;
+
+      // Python
+      case 'py':
+      case 'pyc':
+      case 'pyo':
+      case 'pyd':
+        return Icons.account_tree;
+
+      // HTML/CSS
+      case 'html':
+      case 'htm':
+        return Icons.language;
+      case 'css':
+      case 'scss':
+      case 'sass':
+      case 'less':
+        return Icons.palette;
+
+      // Node.js
+      case 'node':
+      case 'njs':
+        return Icons.dns;
+
+      // Java
+      case 'java':
+      case 'class':
+      case 'jar':
+        return Icons.coffee;
+
+      // C/C++
+      case 'c':
+      case 'cpp':
+      case 'cc':
+      case 'h':
+      case 'hpp':
+        return Icons.memory;
+
+      // PHP
+      case 'php':
+        return Icons.web;
+
+      // Ruby
+      case 'rb':
+      case 'erb':
+        return Icons.diamond;
+
+      // Go
+      case 'go':
+        return Icons.rocket_launch;
+
+      // Rust
+      case 'rs':
+        return Icons.settings;
+
+      // Kotlin
+      case 'kt':
+      case 'kts':
+        return Icons.android;
+
+      // Swift
+      case 'swift':
+        return Icons.phone_iphone;
+
+      // Dart/Flutter
+      case 'dart':
+        return Icons.flutter_dash;
+
+      // SQL/Database
+      case 'sql':
+      case 'db':
+      case 'sqlite':
+        return Icons.storage;
+
+      // XML/YAML
+      case 'xml':
+      case 'yaml':
+      case 'yml':
+        return Icons.format_align_left;
+
+      // Config Files
+      case 'env':
+      case 'config':
+      case 'toml':
+      case 'ini':
+        return Icons.settings_applications;
+
+      // Shell/Bash
+      case 'sh':
+      case 'bash':
+      case 'zsh':
+      case 'fish':
+        return Icons.terminal;
+
+      // Audio Files
+      case 'mp3':
+      case 'wav':
+      case 'aac':
+      case 'm4a':
+      case 'ogg':
+      case 'flac':
+      case 'wma':
+        return Icons.audiotrack;
+
+      // Video Files
+      case 'mp4':
+      case 'mov':
+      case 'avi':
+      case 'mkv':
+      case 'flv':
+      case 'wmv':
+      case 'webm':
+        return Icons.videocam;
+
+      // Image Files
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'bmp':
+      case 'tiff':
+      case 'svg':
+      case 'webp':
+        return Icons.image;
+
+      // Archive Files
+      case 'zip':
+      case 'rar':
+      case '7z':
+      case 'tar':
+      case 'gz':
+      case 'bz2':
+        return Icons.archive;
+
+      // Executables
+      case 'exe':
+      case 'app':
+      case 'dmg':
+      case 'deb':
+      case 'rpm':
+        return Icons.play_arrow;
+
+      // React/Vue/Angular specific
+      case 'vue':
+        return Icons.view_quilt;
+      case 'svelte':
+        return Icons.dashboard;
+
+      // Package Managers
+      case 'lock':
+      case 'package':
+        return Icons.inventory;
+
+      // Log Files
+      case 'log':
+        return Icons.assignment;
+
+      // Default for any other file type
       default:
         return Icons.insert_drive_file;
     }
@@ -1678,19 +2825,194 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
   Color _getFileColor(String fileName) {
     final extension = fileName.split('.').last.toLowerCase();
     switch (extension) {
+      // Documents
       case 'pdf':
         return Colors.red;
       case 'docx':
-      case 'doc':
+      case 'gdoc':
+      case 'gslides':
+      case 'gsheet':
+      case 'gform':
+      case 'gscript':
         return Colors.blue;
       case 'xlsx':
       case 'xls':
+      case 'csv':
         return Colors.green;
       case 'pptx':
       case 'ppt':
         return Colors.orange;
       case 'txt':
+      case 'rtf':
+      case 'md':
         return Colors.grey;
+
+      // JavaScript/TypeScript - Yellow
+      case 'js':
+      case 'jsx':
+        return Colors.yellow[700]!;
+      case 'ts':
+      case 'tsx':
+        return Colors.blue[700]!;
+      case 'json':
+        return Colors.amber;
+
+      // Python - Blue/Green
+      case 'py':
+      case 'pyc':
+      case 'pyo':
+      case 'pyd':
+        return Colors.blue[400]!;
+
+      // HTML/CSS - Orange/Blue
+      case 'html':
+      case 'htm':
+        return Colors.deepOrange;
+      case 'css':
+      case 'scss':
+      case 'sass':
+      case 'less':
+        return Colors.blue[300]!;
+
+      // Node.js - Green
+      case 'node':
+      case 'njs':
+        return Colors.green[600]!;
+
+      // Java - Red/Orange
+      case 'java':
+      case 'class':
+      case 'jar':
+        return Colors.red[700]!;
+
+      // C/C++ - Purple
+      case 'c':
+      case 'cpp':
+      case 'cc':
+      case 'h':
+      case 'hpp':
+        return Colors.purple;
+
+      // PHP - Purple
+      case 'php':
+        return Colors.purple[400]!;
+
+      // Ruby - Red
+      case 'rb':
+      case 'erb':
+        return Colors.red[900]!;
+
+      // Go - Cyan
+      case 'go':
+        return Colors.cyan;
+
+      // Rust - Orange/Brown
+      case 'rs':
+        return Colors.deepOrange[900]!;
+
+      // Kotlin - Purple
+      case 'kt':
+      case 'kts':
+        return Colors.purple[600]!;
+
+      // Swift - Orange
+      case 'swift':
+        return Colors.orange;
+
+      // Dart/Flutter - Blue
+      case 'dart':
+        return Colors.blue[500]!;
+
+      // SQL/Database - Brown
+      case 'sql':
+      case 'db':
+      case 'sqlite':
+        return Colors.brown;
+
+      // XML/YAML - Green
+      case 'xml':
+      case 'yaml':
+      case 'yml':
+        return Colors.green[400]!;
+
+      // Config Files - Grey
+      case 'env':
+      case 'config':
+      case 'toml':
+      case 'ini':
+        return Colors.grey[600]!;
+
+      // Shell/Bash - Green
+      case 'sh':
+      case 'bash':
+      case 'zsh':
+      case 'fish':
+        return Colors.green[800]!;
+
+      // Audio Files - Purple
+      case 'mp3':
+      case 'wav':
+      case 'aac':
+      case 'm4a':
+      case 'ogg':
+      case 'flac':
+      case 'wma':
+        return Colors.purple;
+
+      // Video Files - Red/Orange
+      case 'mp4':
+      case 'mov':
+      case 'avi':
+      case 'mkv':
+      case 'flv':
+      case 'wmv':
+      case 'webm':
+        return Colors.deepOrange;
+
+      // Image Files - Pink
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'bmp':
+      case 'tiff':
+      case 'svg':
+      case 'webp':
+        return Colors.pink;
+
+      // Archive Files - Brown
+      case 'zip':
+      case 'rar':
+      case '7z':
+      case 'tar':
+      case 'gz':
+      case 'bz2':
+        return Colors.brown;
+
+      // Executables - Green
+      case 'exe':
+      case 'app':
+      case 'dmg':
+      case 'deb':
+      case 'rpm':
+        return Colors.green[700]!;
+
+      // React/Vue/Angular
+      case 'vue':
+        return Colors.green[400]!;
+      case 'svelte':
+        return Colors.orange[300]!;
+
+      // Package Managers - Blue Grey
+      case 'lock':
+      case 'package':
+        return Colors.blueGrey;
+
+      // Log Files - Grey
+      case 'log':
+        return Colors.grey[700]!;
+
+      // Default for any other file type
       default:
         return Colors.indigo;
     }
@@ -1973,8 +3295,9 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Supports: PDF, DOCX, XLSX, PPTX, TXT',
+                    'Supports: All File Types (Documents, Code, Images, Audio, Video, Archives, etc.)',
                     style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton.icon(

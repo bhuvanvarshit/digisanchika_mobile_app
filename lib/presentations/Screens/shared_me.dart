@@ -19,8 +19,6 @@ import 'package:digi_sanchika/services/document_opener_service.dart';
 import 'package:digi_sanchika/presentations/Screens/shared_folder_screen.dart';
 import 'package:digi_sanchika/services/api_service.dart';
 import 'package:digi_sanchika/services/my_documents_service.dart';
-
-// Add this import at the top
 import 'package:digi_sanchika/services/shared_folders_service.dart';
 
 class SharedMeScreen extends StatefulWidget {
@@ -33,7 +31,7 @@ class SharedMeScreen extends StatefulWidget {
 class _SharedMeScreenState extends State<SharedMeScreen> {
   // Services
   final SharedDocumentsService _sharedService = SharedDocumentsService();
-  // final SharedFoldersService _sharedFoldersService = SharedFoldersService();
+  final SharedFoldersService _sharedFoldersService = SharedFoldersService();
   final DocumentOpenerService _documentOpener = DocumentOpenerService();
 
   // Controllers
@@ -64,6 +62,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   }
 
   /// Load shared documents and folders
+
   Future<void> _loadSharedData() async {
     if (!mounted) return;
 
@@ -95,17 +94,21 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
       }
 
       // Try to load from backend first
-      // final response = await _sharedFoldersService.fetchSharedFolders();
+      // FIX: Get the SharedDocumentsResponse and extract documents/folders from it
       final response = await _sharedService.fetchSharedDocuments();
+
+      // Extract documents and folders from the response
+      final List<Document> documents = response.documents;
+      final List<SharedFolder> folders = response.folders;
 
       if (!mounted) return;
 
       setState(() {
-        _sharedDocuments = response.documents;
-        _filteredDocuments = response.documents;
-        _sharedFolders = response.folders;
-        _totalDocuments = response.documents.length;
-        _totalFolders = response.folders.length;
+        _sharedDocuments = documents;
+        _filteredDocuments = documents;
+        _sharedFolders = folders;
+        _totalDocuments = documents.length;
+        _totalFolders = folders.length;
         _isLoading = false;
       });
 

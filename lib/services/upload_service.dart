@@ -19,6 +19,226 @@ class UploadService {
     return cookie != null && cookie.isNotEmpty;
   }
 
+  // ============ MIME TYPE HELPERS ============
+  static MediaType? _getMediaTypeForFile(File file) {
+    final fileName = file.path.split('/').last.toLowerCase();
+    final extension = fileName.split('.').last;
+
+    // Document types (from your original list)
+    switch (extension) {
+      case 'pdf':
+        return MediaType('application', 'pdf');
+      case 'doc':
+        return MediaType('application', 'msword');
+      case 'docx':
+        return MediaType(
+          'application',
+          'vnd.openxmlformats-officedocument.wordprocessingml.document',
+        );
+      case 'xls':
+        return MediaType('application', 'vnd.ms-excel');
+      case 'xlsx':
+        return MediaType(
+          'application',
+          'vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+      case 'ppt':
+        return MediaType('application', 'vnd.ms-powerpoint');
+      case 'pptx':
+        return MediaType(
+          'application',
+          'vnd.openxmlformats-officedocument.presentationml.presentation',
+        );
+      case 'txt':
+        return MediaType('text', 'plain');
+
+      // Image types (added for image support)
+      case 'jpg':
+      case 'jpeg':
+        return MediaType('image', 'jpeg');
+      case 'png':
+        return MediaType('image', 'png');
+      case 'gif':
+        return MediaType('image', 'gif');
+      case 'bmp':
+        return MediaType('image', 'bmp');
+      case 'webp':
+        return MediaType('image', 'webp');
+      case 'svg':
+        return MediaType('image', 'svg+xml');
+      case 'tiff':
+      case 'tif':
+        return MediaType('image', 'tiff');
+      case 'ico':
+        return MediaType('image', 'x-icon');
+
+      // Audio types
+      case 'mp3':
+        return MediaType('audio', 'mpeg');
+      case 'wav':
+        return MediaType('audio', 'wav');
+      case 'ogg':
+        return MediaType('audio', 'ogg');
+      case 'm4a':
+        return MediaType('audio', 'mp4');
+      case 'flac':
+        return MediaType('audio', 'flac');
+
+      // Video types
+      case 'mp4':
+        return MediaType('video', 'mp4');
+      case 'avi':
+        return MediaType('video', 'x-msvideo');
+      case 'mov':
+        return MediaType('video', 'quicktime');
+      case 'wmv':
+        return MediaType('video', 'x-ms-wmv');
+      case 'flv':
+        return MediaType('video', 'x-flv');
+      case 'mkv':
+        return MediaType('video', 'x-matroska');
+      case 'webm':
+        return MediaType('video', 'webm');
+
+      // Archive types
+      case 'zip':
+        return MediaType('application', 'zip');
+      case 'rar':
+        return MediaType('application', 'x-rar-compressed');
+      case '7z':
+        return MediaType('application', 'x-7z-compressed');
+      case 'tar':
+        return MediaType('application', 'x-tar');
+      case 'gz':
+        return MediaType('application', 'gzip');
+
+      // Code/Text files
+      case 'html':
+      case 'htm':
+        return MediaType('text', 'html');
+      case 'css':
+        return MediaType('text', 'css');
+      case 'js':
+        return MediaType('text', 'javascript');
+      case 'json':
+        return MediaType('application', 'json');
+      case 'xml':
+        return MediaType('application', 'xml');
+      case 'csv':
+        return MediaType('text', 'csv');
+
+      // In UploadService._getMediaTypeForFile method, add Google Drive file support:
+
+      case 'gdoc':
+        return MediaType('application', 'vnd.google-apps.document');
+      case 'gsheet':
+        return MediaType('application', 'vnd.google-apps.spreadsheet');
+      case 'gslides':
+        return MediaType('application', 'vnd.google-apps.presentation');
+      case 'gdraw':
+        return MediaType('application', 'vnd.google-apps.drawing');
+      case 'gform':
+        return MediaType('application', 'vnd.google-apps.form');
+      case 'gscript':
+        return MediaType('application', 'vnd.google-apps.script');
+      case 'gjam':
+        return MediaType('application', 'vnd.google-apps.jam');
+      case 'gsite':
+        return MediaType('application', 'vnd.google-apps.site');
+      case 'gtable':
+        return MediaType('application', 'vnd.google-apps.table');
+
+      // Also add Apple iWork file support (seen in your code):
+      case 'pages':
+        return MediaType('application', 'vnd.apple.pages');
+      case 'numbers':
+        return MediaType('application', 'vnd.apple.numbers');
+      case 'key':
+        return MediaType('application', 'vnd.apple.keynote');
+
+      // Add OpenDocument format support:
+      case 'odt':
+        return MediaType('application', 'vnd.oasis.opendocument.text');
+      case 'ods':
+        return MediaType('application', 'vnd.oasis.opendocument.spreadsheet');
+      case 'odp':
+        return MediaType('application', 'vnd.oasis.opendocument.presentation');
+      case 'odg':
+        return MediaType('application', 'vnd.oasis.opendocument.graphics');
+      case 'odf':
+        return MediaType('application', 'vnd.oasis.opendocument.formula');
+
+      default:
+        // Fallback to octet-stream for unknown types
+        if (kDebugMode) {
+          print('⚠️ Unknown file extension: .$extension, using octet-stream');
+        }
+        return MediaType('application', 'octet-stream');
+    }
+  }
+
+  // Updated to allow all file types
+  static bool _isFileTypeAllowed(String fileName) {
+    // Allow all file types for now (you can add restrictions if needed)
+
+    // If you want to restrict to specific types only, use this:
+
+    final extension = fileName.split('.').last.toLowerCase();
+    final allowedExtensions = [
+      // Documents
+      'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt',
+      // Images
+      'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif',
+      // Audio
+      'mp3', 'wav', 'ogg', 'm4a', 'flac',
+      // Video
+      'mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm',
+      // Archives
+      'zip', 'rar', '7z', 'tar', 'gz',
+      // Code/Text
+      'html', 'htm', 'css', 'js', 'json', 'xml', 'csv',
+    ];
+    return allowedExtensions.contains(extension);
+  }
+
+  // Validate file before upload
+  static Map<String, dynamic> _validateFileForUpload(File file) {
+    final fileName = file.path.split('/').last;
+
+    // Skip validation for Google Drive files since they're small
+    final extension = fileName.split('.').last.toLowerCase();
+    if (['gdoc', 'gsheet', 'gslides', 'gdraw'].contains(extension)) {
+      return {
+        'valid': true,
+        'fileName': fileName,
+        'fileSize': file.lengthSync(),
+        'mediaType': _getMediaTypeForFile(file),
+      };
+    }
+    // Check file type
+    if (!_isFileTypeAllowed(fileName)) {
+      return {'valid': false, 'message': 'File type not allowed: $fileName'};
+    }
+
+    // Check file size (500MB limit)
+    final fileSize = file.lengthSync();
+    if (fileSize > 500 * 1024 * 1024) {
+      return {'valid': false, 'message': 'File exceeds 500MB limit: $fileName'};
+    }
+
+    // Check if file exists and is readable
+    if (!file.existsSync()) {
+      return {'valid': false, 'message': 'File does not exist: $fileName'};
+    }
+
+    return {
+      'valid': true,
+      'fileName': fileName,
+      'fileSize': fileSize,
+      'mediaType': _getMediaTypeForFile(file),
+    };
+  }
+
   // ============ SINGLE FILE UPLOAD ============
   static Future<Map<String, dynamic>> uploadSingleFile({
     required File file,
@@ -36,11 +256,20 @@ class UploadService {
       if (kDebugMode) {
         print('📤 Starting single file upload...');
       }
-      if (kDebugMode) {
-        print('📄 File: ${file.path}');
+
+      // Validate file first
+      final validation = _validateFileForUpload(file);
+      if (!validation['valid']) {
+        return {'success': false, 'message': validation['message']};
       }
+
+      final fileName = validation['fileName'];
+      final mediaType = validation['mediaType'] as MediaType?;
+
       if (kDebugMode) {
-        print('📏 File size: ${file.lengthSync()} bytes');
+        print('📄 File: $fileName');
+        print('📏 File size: ${validation['fileSize']} bytes');
+        print('📝 MIME Type: ${mediaType?.mimeType}');
       }
 
       // Check authentication
@@ -65,15 +294,15 @@ class UploadService {
         }
       }
 
-      // Add the file
+      // Add the file with proper MIME type
       final fileStream = http.ByteStream(file.openRead());
       final fileLength = await file.length();
       final multipartFile = http.MultipartFile(
         'file',
         fileStream,
         fileLength,
-        filename: file.path.split('/').last,
-        contentType: MediaType('application', 'octet-stream'),
+        filename: fileName,
+        contentType: mediaType, // Use proper MIME type
       );
       request.files.add(multipartFile);
 
@@ -179,20 +408,31 @@ class UploadService {
         }
       }
 
-      // Add all files
+      // Add all files with proper MIME types
       for (var file in files) {
+        final validation = _validateFileForUpload(file);
+        if (!validation['valid']) {
+          if (kDebugMode) {
+            print('❌ Skipping invalid file: ${validation['message']}');
+          }
+          continue;
+        }
+
+        final fileName = validation['fileName'];
+        final mediaType = validation['mediaType'] as MediaType?;
+
         final fileStream = http.ByteStream(file.openRead());
         final fileLength = await file.length();
         final multipartFile = http.MultipartFile(
           'files',
           fileStream,
           fileLength,
-          filename: file.path.split('/').last,
-          contentType: MediaType('application', 'octet-stream'),
+          filename: fileName,
+          contentType: mediaType, // Use proper MIME type
         );
         request.files.add(multipartFile);
         if (kDebugMode) {
-          print('➕ Added file: ${file.path.split('/').last}');
+          print('➕ Added file: $fileName (${mediaType?.mimeType})');
         }
       }
 
@@ -256,235 +496,6 @@ class UploadService {
     }
   }
 
-  // ============ FOLDER UPLOAD (NEW) ============
-  static Future<Map<String, dynamic>> uploadFolder({
-    required String folderName,
-    required List<File> files,
-    required String keywords,
-    required String remarks,
-    required String docClass,
-    required bool allowDownload,
-    required String sharing,
-    required String parentFolderId,
-    String specificUsers = "[]",
-  }) async {
-    try {
-      if (kDebugMode) {
-        print('📤 Starting folder upload: $folderName');
-      }
-      if (kDebugMode) {
-        print('📦 Files count: ${files.length}');
-      }
-
-      // Check authentication
-      final isAuthenticated = await _isAuthenticatedForUpload();
-      if (!isAuthenticated['authenticated']) {
-        return {
-          'success': false,
-          'message': isAuthenticated['message'],
-          'requiresLogin': true,
-        };
-      }
-
-      // Step 1: Create the folder first
-      final folderResult = await _createFolder(
-        folderName: folderName,
-        parentFolderId: parentFolderId,
-      );
-
-      if (folderResult['success'] != true) {
-        return {
-          'success': false,
-          'message': 'Failed to create folder: ${folderResult['message']}',
-        };
-      }
-
-      final newFolderId = folderResult['folderId']?.toString() ?? '';
-      if (kDebugMode) {
-        print('✅ Created folder with ID: $newFolderId');
-      }
-
-      // Step 2: Upload files to the new folder
-      final uploadResult = await uploadMultipleFiles(
-        files: files,
-        keywords: keywords,
-        remarks: remarks,
-        docClass: docClass,
-        allowDownload: allowDownload,
-        sharing: sharing,
-        folderId: newFolderId,
-        specificUsers: specificUsers,
-        preserveStructure: true,
-      );
-
-      return {
-        'success': uploadResult['success'],
-        'message': uploadResult['message'],
-        'folder_id': newFolderId,
-        'uploaded_files': uploadResult['uploaded_files'] ?? [],
-        'failed_files': uploadResult['failed_files'] ?? [],
-      };
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ Folder upload error: $e');
-      }
-      return {'success': false, 'message': 'Folder upload error: $e'};
-    }
-  }
-
-  // ============ CREATE FOLDER ============
-  static Future<Map<String, dynamic>> _createFolder({
-    required String folderName,
-    required String parentFolderId,
-  }) async {
-    try {
-      if (kDebugMode) {
-        print('📁 Creating folder: $folderName (Parent: $parentFolderId)');
-      }
-
-      final headers = await _getAuthHeaders();
-      final url = Uri.parse('$_baseUrl/folders');
-
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: {
-          'name': folderName,
-          'parent_id': parentFolderId.isEmpty ? '' : parentFolderId,
-        },
-      );
-
-      if (kDebugMode) {
-        print('📡 Create folder response: ${response.statusCode}');
-      }
-      if (kDebugMode) {
-        print('📦 Response body: ${response.body}');
-      }
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return {
-          'success': true,
-          'folderId': data['id']?.toString(),
-          'message': 'Folder created successfully',
-        };
-      } else if (response.statusCode == 401) {
-        await ApiService.clearSessionCookie();
-        return {
-          'success': false,
-          'message': 'Session expired. Please login again.',
-          'requiresLogin': true,
-        };
-      } else {
-        return {
-          'success': false,
-          'message': 'Failed to create folder (${response.statusCode})',
-        };
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ Create folder error: $e');
-      }
-      return {'success': false, 'message': 'Create folder error: $e'};
-    }
-  }
-
-  // ============ TEST UPLOAD CONNECTION ============
-  static Future<Map<String, dynamic>> testUploadConnection() async {
-    try {
-      if (kDebugMode) {
-        print('🧪 Testing upload connection...');
-      }
-
-      // Check authentication first
-      final isAuthenticated = await _isAuthenticatedForUpload();
-      if (!isAuthenticated['authenticated']) {
-        return {
-          'success': false,
-          'message': isAuthenticated['message'],
-          'requiresLogin': true,
-        };
-      }
-
-      // Create a dummy file for testing
-      final tempFile = File('${Directory.systemTemp.path}/test_upload.txt');
-      await tempFile.writeAsString('Test upload file content');
-
-      final url = Uri.parse('$_baseUrl/upload');
-      final request = http.MultipartRequest('POST', url);
-
-      // Add session cookie to request
-      final sessionCookie = await _getSessionCookie();
-      if (sessionCookie != null) {
-        request.headers['Cookie'] = 'session_id=$sessionCookie';
-        if (kDebugMode) {
-          print('🍪 Added session cookie to request');
-        }
-      }
-
-      // Add dummy file
-      final fileStream = http.ByteStream(tempFile.openRead());
-      final fileLength = await tempFile.length();
-      final multipartFile = http.MultipartFile(
-        'file',
-        fileStream,
-        fileLength,
-        filename: 'test_upload.txt',
-        contentType: MediaType('text', 'plain'),
-      );
-      request.files.add(multipartFile);
-
-      // Add dummy form fields
-      request.fields['keywords'] = 'test,upload';
-      request.fields['remarks'] = 'Test upload connection';
-      request.fields['doc_class'] = 'General';
-      request.fields['allow_download'] = 'true';
-      request.fields['sharing'] = 'private';
-      request.fields['folder_id'] = '';
-      request.fields['specific_users'] = '[]';
-      request.fields['is_new_version'] = 'false';
-      request.fields['existing_document_id'] = '';
-
-      final response = await request.send();
-      // ignore: unused_local_variable
-      final responseBody = await response.stream.bytesToString();
-
-      // Clean up temp file
-      await tempFile.delete();
-
-      if (kDebugMode) {
-        print('📡 Test response status: ${response.statusCode}');
-      }
-
-      if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': 'Upload connection successful',
-          'statusCode': response.statusCode,
-        };
-      } else if (response.statusCode == 401) {
-        await ApiService.clearSessionCookie();
-        return {
-          'success': false,
-          'message': 'Authentication required. Please login.',
-          'statusCode': 401,
-          'requiresLogin': true,
-        };
-      } else {
-        return {
-          'success': false,
-          'message': 'Upload test failed (${response.statusCode})',
-          'statusCode': response.statusCode,
-        };
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('❌ Test upload error: $e');
-      }
-      return {'success': false, 'message': 'Test failed: $e'};
-    }
-  }
-
   // ============ PRIVATE HELPER METHODS ============
 
   // Check if user is authenticated for upload
@@ -501,10 +512,7 @@ class UploadService {
 
   // Get auth headers
   static Future<Map<String, String>> _getAuthHeaders() async {
-    final headers = <String, String>{
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Accept': 'application/json',
-    };
+    final headers = <String, String>{'Accept': 'application/json'};
 
     final cookie = await _getSessionCookie();
     if (cookie != null && cookie.isNotEmpty) {
