@@ -21,6 +21,10 @@
 **/android/key.properties
 **/android/**/**.keystore
 **/android/**/**.jks
+**/android/app/build/
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
 
 # iOS
 **/ios/**/*.mode1v3
@@ -144,3 +148,7 @@ yarn-error.log*
 .vscode/launch.json
 .vscode/settings.json
 .vscode/tasks.json
+
+# Project-specific ignores
+error.txt
+android/build/reports/
