@@ -16,6 +16,7 @@ import 'package:digi_sanchika/presentations/Screens/document_library.dart';
 import 'package:digi_sanchika/presentations/Screens/upload_document.dart';
 import 'package:digi_sanchika/presentations/Screens/folder_screen.dart';
 import 'package:digi_sanchika/presentations/Screens/shared_me.dart';
+import 'package:digi_sanchika/presentations/Screens/documents_hub.dart';
 import 'package:open_filex/open_filex.dart';
 // ignore: unused_import
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,14 +54,17 @@ class _HomePageState extends State<HomePage>
   String? _downloadingFileName;
 
   @override
+  @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    // CHANGE FROM 4 to 3 tabs
+    _tabController = TabController(length: 3, vsync: this);
     _loadInitialData();
     _initializeBackend();
 
     _tabController.addListener(() {
       if (_tabController.index == 1) {
+        // This is now the Hub tab instead of Library
         setState(() {});
       } else if (_tabController.index == 0) {
         _refreshData();
@@ -168,6 +172,221 @@ class _HomePageState extends State<HomePage>
         folder.documents.add(document);
       }
     }
+  }
+
+  /// NEW FUNCTION: Builds the Documents Hub tab
+  Widget _buildDocumentsHubTab() {
+    return Container(
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            const SizedBox(height: 20),
+            const Text(
+              'Documents Hub',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.indigo,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Access different types of documents',
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 40),
+
+            // Options Grid
+            Expanded(
+              child: GridView.count(
+                crossAxisCount: 2,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: 1.0,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                children: [
+                  // Option 1: Shared Documents
+                  _buildHubCard(
+                    icon: Icons.people_alt,
+                    title: 'Shared With Me',
+                    subtitle: 'Documents shared with you',
+                    color: Colors.purple,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SharedMeScreen(),
+                        ),
+                      );
+                    },
+                  ),
+
+                  // Option 2: Document Library
+                  _buildHubCard(
+                    icon: Icons.public,
+                    title: 'Document Library',
+                    subtitle: 'Public documents',
+                    color: Colors.green,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const DocumentLibrary(),
+                        ),
+                      );
+                    },
+                  ),
+
+                  // Option 3: Quick Stats
+                  _buildHubCard(
+                    icon: Icons.bar_chart,
+                    title: 'Quick Stats',
+                    subtitle: 'View document statistics',
+                    color: Colors.orange,
+                    onTap: () {
+                      _showStatsDialog();
+                    },
+                  ),
+
+                  // Option 4: Favorites (Coming Soon)
+                  _buildHubCard(
+                    icon: Icons.star,
+                    title: 'Favorites',
+                    subtitle: 'Coming soon',
+                    color: Colors.amber,
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Favorites feature coming soon!'),
+                          backgroundColor: Colors.blue,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Helper function to build Hub cards
+  Widget _buildHubCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withOpacity(0.2), width: 1),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 32, color: color),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Show statistics dialog
+  void _showStatsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Document Statistics'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildStatItem('My Documents', allDocuments.length.toString()),
+              _buildStatItem('Shared With Me', '0'), // You can update this
+              _buildStatItem('Public Files', '0'), // You can update this
+              const Divider(height: 20),
+              _buildStatItem('Total Files', allDocuments.length.toString()),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Helper for stats items
+  Widget _buildStatItem(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+          Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.indigo,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<List<int>> _getAllFolderIds() async {
@@ -1567,11 +1786,11 @@ class _HomePageState extends State<HomePage>
             fontSize: 13,
           ),
           unselectedLabelStyle: const TextStyle(fontSize: 13),
+          // CHANGE THESE TABS:
           tabs: const [
-            Tab(text: 'Documents'),
-            Tab(text: 'Library'),
-            Tab(text: 'Shared'),
-            Tab(text: 'Upload'),
+            Tab(text: 'My Documents'), // Tab 0
+            Tab(text: 'Document Hub'), // Tab 1 (replaces Library & Shared)
+            Tab(text: 'Upload Docs'), // Tab 2
           ],
         ),
       ),
@@ -1580,10 +1799,10 @@ class _HomePageState extends State<HomePage>
           TabBarView(
             controller: _tabController,
             children: [
-              _buildMyDocumentsTab(),
-              const DocumentLibrary(),
-              const SharedMeScreen(),
+              _buildMyDocumentsTab(), // Tab 0: My Documents
+              const DocumentsHub(), // Tab 1: NEW - Just use your DocumentsHub screen
               UploadDocumentTab(
+                // Tab 2: Upload
                 onDocumentUploaded: _addNewDocument,
                 folders: folders,
                 userName: widget.userName,

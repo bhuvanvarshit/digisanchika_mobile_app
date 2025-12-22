@@ -201,45 +201,39 @@ class _DocumentLibraryState extends State<DocumentLibrary>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          'Document Library',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.indigo,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 20,
+            color: Colors.indigo,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: Column(
         children: [
-          // Header Section - Same as Shared Me screen
+          // Search and filter section
           Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.indigo.shade50,
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-              ),
-            ),
+            padding: const EdgeInsets.all(16),
+            color: Colors.grey.shade50,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
               children: [
-                // Title
-                const Text(
-                  'Document Library',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.indigo,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Subtitle
-                const Text(
-                  'Browse and search public documents shared by all users',
-                  style: TextStyle(fontSize: 14, color: Colors.indigo),
-                ),
-                const SizedBox(height: 20),
-
                 // Search and Filter Row
                 Row(
                   children: [
-                    // Search Bar - 70% width
+                    // Search Bar
                     Expanded(
                       child: Container(
                         decoration: BoxDecoration(
@@ -284,10 +278,8 @@ class _DocumentLibraryState extends State<DocumentLibrary>
                         ),
                       ),
                     ),
-
                     const SizedBox(width: 12),
-
-                    // Filter Dropdown - 30% width
+                    // Filter Dropdown
                     Container(
                       constraints: const BoxConstraints(maxWidth: 120),
                       decoration: BoxDecoration(
@@ -346,14 +338,63 @@ class _DocumentLibraryState extends State<DocumentLibrary>
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
+                // Results count
+                Row(
+                  children: [
+                    Text(
+                      '${_finalFilteredDocuments.length} document${_finalFilteredDocuments.length == 1 ? '' : 's'} found',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (_searchQuery.isNotEmpty || _selectedFilter != 'All')
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _filterDocuments('');
+                            _selectedFilter = 'All';
+                          });
+                        },
+                        child: Text(
+                          'Clear',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.indigo,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
 
-          // Documents Count and Filter Info
+          // Filter Info Banner (when active)
           if (_searchQuery.isNotEmpty || _selectedFilter != 'All')
-            _buildFilterInfo(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.blue.shade50,
+              child: Row(
+                children: [
+                  Icon(Icons.info, size: 16, color: Colors.blue.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _buildFilterText(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Loading/Downloading Banner
           if (_isDownloading) _buildDownloadingBanner(),
@@ -432,10 +473,10 @@ class _DocumentLibraryState extends State<DocumentLibrary>
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Text(
-                  '${_finalFilteredDocuments.length} document${_finalFilteredDocuments.length == 1 ? '' : 's'} found',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                ),
+                // Text(
+                //   //'${_finalFilteredDocuments.length} document${_finalFilteredDocuments.length == 1 ? '' : 's'} found',
+                //   style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                // ),
               ],
             ),
           ),

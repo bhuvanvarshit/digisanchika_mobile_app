@@ -1261,42 +1261,36 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Shared With Me',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.indigo,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 20,
+            color: Colors.indigo,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: Column(
         children: [
-          // Header Section - Use Container with fixed height instead of SingleChildScrollView
+          // Search and stats section
           Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.indigo.shade50,
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-              ),
-            ),
+            padding: const EdgeInsets.all(16),
+            color: Colors.grey.shade50,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize:
-                  MainAxisSize.min, // Important: Prevent vertical expansion
               children: [
-                // Title
-                const Text(
-                  'Shared With Me',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.indigo,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Subtitle
-                const Text(
-                  'Documents and folders shared with you by other users',
-                  style: TextStyle(fontSize: 14, color: Colors.indigo),
-                ),
-                const SizedBox(height: 20),
-
-                // Search Bar with flexible layout
+                // Search bar
                 Row(
                   children: [
                     Expanded(
@@ -1343,9 +1337,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(width: 12),
-
                     // Folders button - Only show if needed
                     if (_sharedFolders.isNotEmpty)
                       Container(
@@ -1382,7 +1374,28 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 8), // Add small bottom padding
+                const SizedBox(height: 8),
+                // Stats row
+                Row(
+                  children: [
+                    Text(
+                      '${_filteredDocuments.length} document${_filteredDocuments.length == 1 ? '' : 's'}',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (_sharedFolders.isNotEmpty)
+                      Text(
+                        '${_sharedFolders.length} folder${_sharedFolders.length == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
+                        ),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1390,7 +1403,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
           // Loading/Downloading Banner
           if (_isDownloading) _buildDownloadingBanner(),
 
-          // Main Content Area - This will take remaining space
+          // Main Content Area
           if (_isLoading)
             Expanded(
               child: Center(
@@ -1417,65 +1430,17 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
               child: RefreshIndicator(
                 onRefresh: _loadSharedData,
                 color: Colors.indigo,
-                child: Column(
-                  children: [
-                    // Results count
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            '${_filteredDocuments.length} document${_filteredDocuments.length == 1 ? '' : 's'} found',
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (_sharedFolders.isNotEmpty)
-                            Text(
-                              '${_sharedFolders.length} shared folder${_sharedFolders.length == 1 ? '' : 's'}',
-                              style: TextStyle(
-                                color: Colors.grey.shade600,
-                                fontSize: 14,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-
-                    // Documents list
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.only(bottom: 20),
-                        itemCount: _filteredDocuments.length,
-                        itemBuilder: (context, index) {
-                          return _buildDocumentCard(
-                            _filteredDocuments[index],
-                            index,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                child: ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  itemCount: _filteredDocuments.length,
+                  itemBuilder: (context, index) {
+                    return _buildDocumentCard(_filteredDocuments[index], index);
+                  },
                 ),
               ),
             ),
         ],
       ),
-
-      // Refresh button in floating action button
-      // floatingActionButton: !_isLoading
-      //     ? FloatingActionButton(
-      //         onPressed: _loadSharedData,
-      //         backgroundColor: Colors.indigo,
-      //         foregroundColor: Colors.white,
-      //         child: const Icon(Icons.refresh),
-      //       )
-      //     : null,
     );
   }
 
