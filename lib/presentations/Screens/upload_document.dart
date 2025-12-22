@@ -3264,70 +3264,69 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
 
             const SizedBox(height: 24),
 
-            // Single File Upload Section
-            const Text(
-              'Single File Upload',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
+            // // Single File Upload Section
+            // const Text(
+            //   'Single File Upload',
+            //   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            // ),
+            // const SizedBox(height: 16),
 
-            // Upload Area
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300, width: 2),
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.grey.shade50,
-              ),
-              child: Column(
-                children: [
-                  const Icon(
-                    Icons.cloud_upload,
-                    size: 64,
-                    color: Colors.indigo,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Drag and drop a file here or click to browse',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Supports: All File Types (Documents, Code, Images, Audio, Video, Archives, etc.)',
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _pickSingleFile,
-                    icon: _isLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          )
-                        : const Icon(Icons.upload_file),
-                    label: Text(_isLoading ? 'Opening...' : 'Select Files'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
+            // // Upload Area
+            // Container(
+            //   width: double.infinity,
+            //   padding: const EdgeInsets.all(32),
+            //   decoration: BoxDecoration(
+            //     border: Border.all(color: Colors.grey.shade300, width: 2),
+            //     borderRadius: BorderRadius.circular(12),
+            //     color: Colors.grey.shade50,
+            //   ),
+            //   child: Column(
+            //     children: [
+            //       const Icon(
+            //         Icons.cloud_upload,
+            //         size: 64,
+            //         color: Colors.indigo,
+            //       ),
+            //       const SizedBox(height: 16),
+            //       const Text(
+            //         'Drag and drop a file here or click to browse',
+            //         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            //         textAlign: TextAlign.center,
+            //       ),
+            //       const SizedBox(height: 8),
+            //       Text(
+            //         'Supports: All File Types (Documents, Code, Images, Audio, Video, Archives, etc.)',
+            //         style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+            //         textAlign: TextAlign.center,
+            //       ),
+            //       const SizedBox(height: 20),
+            //       ElevatedButton.icon(
+            //         onPressed: _isLoading ? null : _pickSingleFile,
+            //         icon: _isLoading
+            //             ? const SizedBox(
+            //                 width: 16,
+            //                 height: 16,
+            //                 child: CircularProgressIndicator(
+            //                   strokeWidth: 2,
+            //                   valueColor: AlwaysStoppedAnimation<Color>(
+            //                     Colors.white,
+            //                   ),
+            //                 ),
+            //               )
+            //             : const Icon(Icons.upload_file),
+            //         label: Text(_isLoading ? 'Opening...' : 'Select Files'),
+            //         style: ElevatedButton.styleFrom(
+            //           backgroundColor: Colors.indigo,
+            //           foregroundColor: Colors.white,
+            //           padding: const EdgeInsets.symmetric(
+            //             horizontal: 24,
+            //             vertical: 12,
+            //           ),
+            //         ),
+            //       ),
+            //     ],
+            //   ),
+            // ),
             if (_uploadedFiles.isNotEmpty) ...[
               const SizedBox(height: 24),
               const Text(
@@ -3490,28 +3489,27 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
             const SizedBox(height: 16),
 
             // Allow Download Checkbox
-            Card(
-              color: Colors.white,
-              elevation: 1,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: CheckboxListTile(
-                title: const Text(
-                  'Allow Download',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-                value: _allowDownload,
-                onChanged: (value) {
-                  setState(() {
-                    _allowDownload = value!;
-                  });
-                },
-                secondary: const Icon(Icons.download, color: Colors.indigo),
-                controlAffinity: ListTileControlAffinity.leading,
-              ),
-            ),
-
+            // Card(
+            //   color: Colors.white,
+            //   elevation: 1,
+            //   shape: RoundedRectangleBorder(
+            //     borderRadius: BorderRadius.circular(8),
+            //   ),
+            //   child: CheckboxListTile(
+            //     title: const Text(
+            //       'Allow Download',
+            //       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            //     ),
+            //     value: _allowDownload,
+            //     onChanged: (value) {
+            //       setState(() {
+            //         _allowDownload = value!;
+            //       });
+            //     },
+            //     secondary: const Icon(Icons.download, color: Colors.indigo),
+            //     controlAffinity: ListTileControlAffinity.leading,
+            //   ),
+            // ),
             const SizedBox(height: 16),
 
             // Sharing Type Dropdown

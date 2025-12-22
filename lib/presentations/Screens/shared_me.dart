@@ -14,10 +14,8 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:digi_sanchika/presentations/Screens/folder_screen.dart';
 import 'package:digi_sanchika/services/document_opener_service.dart';
 import 'package:digi_sanchika/presentations/Screens/shared_folder_screen.dart';
-import 'package:digi_sanchika/services/api_service.dart';
 import 'package:digi_sanchika/services/my_documents_service.dart';
 import 'package:digi_sanchika/services/shared_folders_service.dart';
 
@@ -62,7 +60,6 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   }
 
   /// Load shared documents and folders
-
   Future<void> _loadSharedData() async {
     if (!mounted) return;
 
@@ -94,7 +91,6 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
       }
 
       // Try to load from backend first
-      // FIX: Get the SharedDocumentsResponse and extract documents/folders from it
       final response = await _sharedService.fetchSharedDocuments();
 
       // Extract documents and folders from the response
@@ -167,6 +163,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   }
 
   /// Filter documents based on search query
+  /// Filter documents based on search query
   void _filterDocuments(String query) {
     if (query.isEmpty) {
       setState(() {
@@ -179,12 +176,17 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     setState(() {
       _filteredDocuments = _sharedDocuments.where((doc) {
         return doc.name.toLowerCase().contains(lowercaseQuery) ||
-            doc.owner.toLowerCase().contains(lowercaseQuery) ||
-            doc.keyword.toLowerCase().contains(lowercaseQuery) ||
+            (doc.owner.isNotEmpty &&
+                doc.owner.toLowerCase().contains(lowercaseQuery)) ||
+            (doc.keyword.isNotEmpty &&
+                doc.keyword.toLowerCase().contains(lowercaseQuery)) ||
             doc.type.toLowerCase().contains(lowercaseQuery) ||
-            doc.classification.toLowerCase().contains(lowercaseQuery) ||
-            doc.details.toLowerCase().contains(lowercaseQuery) ||
-            doc.folder.toLowerCase().contains(lowercaseQuery);
+            (doc.classification.isNotEmpty &&
+                doc.classification.toLowerCase().contains(lowercaseQuery)) ||
+            (doc.details.isNotEmpty &&
+                doc.details.toLowerCase().contains(lowercaseQuery)) ||
+            (doc.folder.isNotEmpty &&
+                doc.folder.toLowerCase().contains(lowercaseQuery));
       }).toList();
     });
   }
@@ -349,9 +351,6 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
             }
           }
 
-          // } else {
-          //   throw Exception('Failed to save file to disk');
-          // }
           final fileExtension = filename.toLowerCase().split('.').last;
           if (fileExtension == 'py' || document.type.toLowerCase() == 'py') {
             _showFileContent(bytesToSave, filename);
@@ -701,6 +700,64 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     }
   }
 
+  // Format date to DD-MM-YYYY (Same as Document Library)
+  // Format date to DD-MM-YYYY (handles both YYYY-MM-DD and DD/MM/YYYY formats)
+  String _formatDateDDMMYYYY(dynamic date) {
+    try {
+      if (date == null || date.toString().isEmpty) {
+        return 'N/A';
+      }
+
+      final dateStr = date.toString().trim();
+
+      // Check if date is in DD/MM/YYYY format (e.g., "29/10/2025")
+      if (dateStr.contains('/')) {
+        final parts = dateStr.split('/');
+        if (parts.length >= 3) {
+          final day = parts[0].padLeft(2, '0');
+          final month = parts[1].padLeft(2, '0');
+          final year = parts[2];
+          return '$day-$month-$year';
+        }
+      }
+
+      // Check if date is in YYYY-MM-DD format (e.g., "2025-10-29")
+      if (dateStr.contains('-')) {
+        final parts = dateStr.split('-');
+        if (parts.length >= 3) {
+          // If first part is 4 digits, assume YYYY-MM-DD format
+          if (parts[0].length == 4) {
+            final year = parts[0];
+            final month = parts[1].padLeft(2, '0');
+            final day = parts[2].split(' ')[0].padLeft(2, '0');
+            return '$day-$month-$year';
+          } else {
+            // Assume DD-MM-YYYY format
+            final day = parts[0].padLeft(2, '0');
+            final month = parts[1].padLeft(2, '0');
+            final year = parts[2];
+            return '$day-$month-$year';
+          }
+        }
+      }
+
+      // Try to parse as DateTime
+      try {
+        final dateTime = DateTime.parse(dateStr);
+        final day = dateTime.day.toString().padLeft(2, '0');
+        final month = dateTime.month.toString().padLeft(2, '0');
+        final year = dateTime.year.toString();
+        return '$day-$month-$year';
+      } catch (e) {
+        // If parsing fails, return original string
+        return dateStr;
+      }
+    } catch (e) {
+      debugPrint('Error formatting date: $e for input: $date');
+      return date.toString();
+    }
+  }
+
   Widget _buildDetailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -719,6 +776,44 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
               value,
               style: const TextStyle(fontSize: 14),
               softWrap: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // NEW Helper method to build detail row WITH icons (for the new design)
+  Widget _buildDetailRowWithIcon(
+    String label,
+    String value,
+    IconData iconData,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(iconData, size: 16, color: Colors.grey.shade600),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -798,7 +893,6 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   }
 
   /// Open a shared folder (navigate to FolderScreen)
-  /// Open a shared folder (navigate to FolderScreen)
   void _openSharedFolder(SharedFolder folder) {
     Navigator.push(
       context,
@@ -812,260 +906,174 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     );
   }
 
-  void _viewAllSharedContent() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SharedFolderScreen(
-          folderId: null, // Root level
-          folderName: 'All Shared Content',
-          userName: null,
-        ),
-      ),
-    );
-  }
-
-  /// Build document item card (UPDATED: View button + Single-tap options + Versions button)
-  /// Build document item card (UPDATED: View button + Single-tap options + Versions button)
-  /// Build document item card (UPDATED: View button + Single-tap options + Versions button)
+  // Build document item card with improved metadata layout (Same as Document Library)
   Widget _buildDocumentCard(Document document, int index) {
-    final fileInfo = _getFileInfo(document.type);
+    final docIcons = {
+      'PDF': Icons.picture_as_pdf,
+      'DOCX': Icons.description,
+      'XLSX': Icons.table_chart,
+      'PPTX': Icons.slideshow,
+      'TXT': Icons.text_snippet,
+      'XLS': Icons.table_chart,
+      'PPT': Icons.slideshow,
+      'DOC': Icons.description,
+      'IMAGE': Icons.image,
+    };
+    final docColors = {
+      'PDF': Colors.red,
+      'DOCX': Colors.blue,
+      'XLSX': Colors.green,
+      'PPTX': Colors.orange,
+      'TXT': Colors.grey,
+      'PPT': Colors.orange,
+      'XLS': Colors.green,
+      'DOC': Colors.blue,
+      'IMAGE': Colors.purple,
+    };
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _handleDocumentDoubleTap(document),
+    String fileType = document.type.toUpperCase();
+    IconData icon = docIcons[fileType] ?? Icons.insert_drive_file;
+    Color color = docColors[fileType] ?? Colors.indigo;
+
+    // Format the date to DD MM YYYY
+    String formattedDate = _formatDateDDMMYYYY(document.uploadDate);
+
+    return InkWell(
+      onTap: () => _handleDocumentDoubleTap(document),
+      borderRadius: BorderRadius.circular(12),
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header row with icon and title
+              // Top row with icon, document info
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // File type icon
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: fileInfo['color'].withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
+                      color: color.withAlpha(10),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(
-                      fileInfo['icon'],
-                      color: fileInfo['color'],
-                      size: 32,
-                    ),
+                    child: Icon(icon, color: color, size: 32),
                   ),
                   const SizedBox(width: 16),
-
-                  // Document info
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Document name
                         Text(
                           document.name,
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            height: 1.3,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 6),
-
-                        // Owner info
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.person_outline,
-                              size: 14,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'Shared by: ${document.owner}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
                         const SizedBox(height: 4),
-
-                        // Folder and classification
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.folder_open,
-                              size: 14,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                '${document.folder} • ${document.classification}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          'Type: ${document.type} • $formattedDate',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-
+              const SizedBox(height: 16),
+              const Divider(height: 1),
               const SizedBox(height: 12),
 
-              // File details row
-              Row(
-                children: [
-                  Icon(
-                    Icons.description,
-                    size: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${document.type.toUpperCase()} • ${_formatFileSize(document.size)}',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                  ),
-                  const Spacer(),
-                  Icon(
-                    Icons.calendar_today,
-                    size: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    document.uploadDate,
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
-              // Keywords (if available)
+              // Metadata details section - Using NEW helper method with icons
               if (document.keyword.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: document.keyword.split(',').map((keyword) {
-                      final trimmed = keyword.trim();
-                      if (trimmed.isEmpty) return const SizedBox.shrink();
-                      return Chip(
-                        label: Text(
-                          trimmed,
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        backgroundColor: Colors.indigo.withAlpha(10),
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 0,
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                _buildDetailRowWithIcon(
+                  'Keyword',
+                  document.keyword,
+                  Icons.label,
                 ),
+              _buildDetailRowWithIcon('Owner', document.owner, Icons.person),
+              _buildDetailRowWithIcon('Folder', document.folder, Icons.folder),
+              _buildDetailRowWithIcon(
+                'Classification',
+                document.classification,
+                Icons.security,
+              ),
+              if (document.details.isNotEmpty)
+                _buildDetailRowWithIcon(
+                  'Details',
+                  document.details,
+                  Icons.info_outline,
+                ),
+              const SizedBox(height: 16),
 
-              // Action buttons row (View + Versions + Download)
+              // ACTION BUTTONS ROW - View, Versions, and Download (disabled)
               Row(
                 children: [
-                  // VIEW BUTTON with visibility icon
+                  // VIEW BUTTON - opens the document
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _handleDocumentDoubleTap(document),
                       icon: const Icon(Icons.visibility, size: 18),
-                      label: const Padding(
-                        padding: EdgeInsets.only(right: 6),
-                        child: Text('View', style: TextStyle(fontSize: 12)),
-                      ),
+                      label: const Text('View'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.purple,
                         side: const BorderSide(color: Colors.purple),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
                   ),
 
                   const SizedBox(width: 8),
 
-                  // VERSIONS BUTTON
+                  // VERSIONS BUTTON - shows document versions
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _showDocumentVersions(document),
                       icon: const Icon(Icons.history, size: 18),
-                      label: const Padding(
-                        padding: EdgeInsets.only(right: 6),
-                        child: Text('Versions', style: TextStyle(fontSize: 12)),
-                      ),
+                      label: const Text('Versions'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.blue,
                         side: const BorderSide(color: Colors.blue),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
                   ),
 
                   const SizedBox(width: 8),
 
-                  // DISABLED DOWNLOAD BUTTON (with popup)
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _showDownloadRestrictedPopup(context),
-                      icon: Icon(
-                        Icons.download,
-                        size: 18,
-                        color: Colors.grey.shade300,
-                      ),
-                      label: Text(
-                        'Download',
-                        style: TextStyle(color: Colors.grey.shade300),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey.shade200,
-                        foregroundColor: Colors.grey.shade300,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ),
+                  // DISABLED DOWNLOAD BUTTON
+                  // Expanded(
+                  //   child: ElevatedButton.icon(
+                  //     onPressed: () => _showDownloadRestrictedPopup(context),
+                  //     icon: Icon(
+                  //       Icons.download,
+                  //       size: 18,
+                  //       color: Colors.grey.shade300,
+                  //     ),
+                  //     label: Text(
+                  //       'Download',
+                  //       style: TextStyle(color: Colors.grey.shade300),
+                  //     ),
+                  //     style: ElevatedButton.styleFrom(
+                  //       backgroundColor: Colors.grey.shade200,
+                  //       foregroundColor: Colors.grey.shade300,
+                  //       padding: const EdgeInsets.symmetric(vertical: 10),
+                  //       shape: RoundedRectangleBorder(
+                  //         borderRadius: BorderRadius.circular(8),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
                 ],
-              ),
-
-              // Tap hint (updated)
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  'Tap card or click "View" button',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey.shade500,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
               ),
             ],
           ),
@@ -1175,29 +1183,25 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     }
   }
 
-  // /// Format date
-  // String _formatDate(dynamic date) {
-  //   if (date == null) return 'Unknown';
-  //   try {
-  //     final dateTime = DateTime.parse(date.toString());
-  //     return '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';
-  //   } catch (e) {
-  //     final dateStr = date.toString();
-  //     if (dateStr.contains('/')) return dateStr;
-  //     return dateStr;
-  //   }
-  // }
-
+  /// Build empty state widget
   /// Build empty state widget
   Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.people_outline, size: 80, color: Colors.grey.shade400),
+          Icon(
+            _searchController.text.isEmpty
+                ? Icons.people_outline
+                : Icons.search_off,
+            size: 80,
+            color: Colors.grey.shade400,
+          ),
           const SizedBox(height: 20),
           Text(
-            _hasError ? 'Unable to Load Data' : 'No Shared Documents',
+            _searchController.text.isEmpty
+                ? (_hasError ? 'Unable to Load Data' : 'No Shared Documents')
+                : 'No Documents Found',
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -1210,21 +1214,34 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
             child: Text(
               _hasError
                   ? _errorMessage
-                  : 'Documents and folders shared with you will appear here',
+                  : _searchController.text.isEmpty
+                  ? 'Documents and folders shared with you will appear here'
+                  : 'No documents found for "${_searchController.text}"',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
           ),
           const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: _loadSharedData,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Try Again'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.indigo,
-              foregroundColor: Colors.white,
+          if (_searchController.text.isNotEmpty)
+            ElevatedButton.icon(
+              onPressed: _clearSearch,
+              icon: const Icon(Icons.clear_all),
+              label: const Text('Clear Search'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+              ),
+            )
+          else if (_hasError)
+            ElevatedButton.icon(
+              onPressed: _loadSharedData,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1246,7 +1263,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     return Scaffold(
       body: Column(
         children: [
-          // Header Section
+          // Header Section - Use Container with fixed height instead of SingleChildScrollView
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -1258,6 +1275,8 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize:
+                  MainAxisSize.min, // Important: Prevent vertical expansion
               children: [
                 // Title
                 const Text(
@@ -1277,7 +1296,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Search Bar
+                // Search Bar with flexible layout
                 Row(
                   children: [
                     Expanded(
@@ -1295,6 +1314,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                         child: TextField(
                           controller: _searchController,
                           onChanged: _filterDocuments,
+                          maxLines: 1,
                           decoration: InputDecoration(
                             hintText: 'Search documents, owners, keywords...',
                             hintStyle: TextStyle(color: Colors.grey.shade600),
@@ -1316,8 +1336,8 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                               borderSide: BorderSide.none,
                             ),
                             contentPadding: const EdgeInsets.symmetric(
-                              vertical: 16,
-                              horizontal: 20,
+                              vertical: 14,
+                              horizontal: 16,
                             ),
                           ),
                         ),
@@ -1326,9 +1346,10 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
 
                     const SizedBox(width: 12),
 
-                    // Folders button
+                    // Folders button - Only show if needed
                     if (_sharedFolders.isNotEmpty)
                       Container(
+                        constraints: const BoxConstraints(maxWidth: 80),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [
@@ -1341,14 +1362,17 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                         ),
                         child: ElevatedButton.icon(
                           onPressed: _showSharedFolders,
-                          icon: const Icon(Icons.folder_shared),
-                          label: Text('${_sharedFolders.length}'),
+                          icon: const Icon(Icons.folder_shared, size: 18),
+                          label: Text(
+                            '${_sharedFolders.length}',
+                            style: const TextStyle(fontSize: 11),
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: Colors.indigo,
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 16,
+                              horizontal: 10,
+                              vertical: 10,
                             ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -1358,6 +1382,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                       ),
                   ],
                 ),
+                const SizedBox(height: 8), // Add small bottom padding
               ],
             ),
           ),
@@ -1365,7 +1390,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
           // Loading/Downloading Banner
           if (_isDownloading) _buildDownloadingBanner(),
 
-          // Loading State
+          // Main Content Area - This will take remaining space
           if (_isLoading)
             Expanded(
               child: Center(
@@ -1385,10 +1410,8 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                 ),
               ),
             )
-          // Empty or Error State
           else if (_filteredDocuments.isEmpty)
             Expanded(child: _buildEmptyState())
-          // Documents List
           else
             Expanded(
               child: RefreshIndicator(
@@ -1445,14 +1468,14 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
       ),
 
       // Refresh button in floating action button
-      floatingActionButton: !_isLoading
-          ? FloatingActionButton(
-              onPressed: _loadSharedData,
-              backgroundColor: Colors.indigo,
-              foregroundColor: Colors.white,
-              child: const Icon(Icons.refresh),
-            )
-          : null,
+      // floatingActionButton: !_isLoading
+      //     ? FloatingActionButton(
+      //         onPressed: _loadSharedData,
+      //         backgroundColor: Colors.indigo,
+      //         foregroundColor: Colors.white,
+      //         child: const Icon(Icons.refresh),
+      //       )
+      //     : null,
     );
   }
 

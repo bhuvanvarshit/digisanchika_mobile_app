@@ -459,39 +459,64 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
   }
 
   // ============ UPDATED DOCUMENT CARD (Same as SharedMeScreen) ============
+  // ============ UPDATED DOCUMENT CARD (Matches Document Library Style) ============
   Widget _buildDocumentCard(Document document) {
-    final fileInfo = _getFileInfo(document.type);
+    final docIcons = {
+      'PDF': Icons.picture_as_pdf,
+      'DOCX': Icons.description,
+      'XLSX': Icons.table_chart,
+      'PPTX': Icons.slideshow,
+      'TXT': Icons.text_snippet,
+      'XLS': Icons.table_chart,
+      'PPT': Icons.slideshow,
+      'DOC': Icons.description,
+      'IMAGE': Icons.image,
+    };
 
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _handleDocumentDoubleTap(document),
+    final docColors = {
+      'PDF': Colors.red,
+      'DOCX': Colors.blue,
+      'XLSX': Colors.green,
+      'PPTX': Colors.orange,
+      'TXT': Colors.grey,
+      'PPT': Colors.orange,
+      'XLS': Colors.green,
+      'DOC': Colors.blue,
+      'IMAGE': Colors.purple,
+    };
+
+    String fileType = document.type.toUpperCase();
+    IconData icon = docIcons[fileType] ?? Icons.insert_drive_file;
+    Color color = docColors[fileType] ?? Colors.indigo;
+
+    // Format the date to DD MM YYYY
+    String formattedDate = _formatDateDDMMYYYY(document.uploadDate);
+
+    return InkWell(
+      onTap: () => _handleDocumentDoubleTap(document),
+      borderRadius: BorderRadius.circular(12),
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header row with icon and title
+              // Top row with icon, document info
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: fileInfo['color'].withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
+                      color: color.withAlpha(10),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(
-                      fileInfo['icon'],
-                      color: fileInfo['color'],
-                      size: 32,
-                    ),
+                    child: Icon(icon, color: color, size: 32),
                   ),
                   const SizedBox(width: 16),
-
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -501,205 +526,175 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            height: 1.3,
                           ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 6),
-
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.person_outline,
-                              size: 14,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'Shared by: ${document.owner}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
                         const SizedBox(height: 4),
-
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.folder_open,
-                              size: 14,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                '${document.folder} • ${document.classification}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey.shade600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          'Type: ${document.type}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-
+              const SizedBox(height: 16),
+              const Divider(height: 1),
               const SizedBox(height: 12),
 
-              Row(
-                children: [
-                  Icon(
-                    Icons.description,
-                    size: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${document.type.toUpperCase()} • ${_formatFileSize(document.size)}',
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                  ),
-                  const Spacer(),
-                  Icon(
-                    Icons.calendar_today,
-                    size: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    document.uploadDate,
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-
+              // Metadata details section
               if (document.keyword.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: document.keyword.split(',').map((keyword) {
-                      final trimmed = keyword.trim();
-                      if (trimmed.isEmpty) return const SizedBox.shrink();
-                      return Chip(
-                        label: Text(
-                          trimmed,
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        backgroundColor: Colors.indigo.withAlpha(10),
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 0,
-                        ),
-                      );
-                    }).toList(),
-                  ),
+                _buildDetailRow('Keyword', document.keyword, Icons.label),
+              _buildDetailRow('Owner', document.owner, Icons.person),
+              _buildDetailRow('Folder', document.folder, Icons.folder),
+              _buildDetailRow(
+                'Classification',
+                document.classification,
+                Icons.security,
+              ),
+              if (document.details.isNotEmpty)
+                _buildDetailRow(
+                  'Details',
+                  document.details,
+                  Icons.info_outline,
                 ),
+              const SizedBox(height: 16),
 
-              // Action buttons row (View + Versions + Download) - FIXED
+              // ACTION BUTTONS ROW - Only View and Versions buttons (Download removed)
               Row(
                 children: [
-                  // VIEW BUTTON with visibility icon
+                  // VIEW BUTTON - opens the document
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _handleDocumentDoubleTap(document),
                       icon: const Icon(Icons.visibility, size: 18),
-                      label: const Text('View', style: TextStyle(fontSize: 12)),
+                      label: const Text('View'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.purple,
                         side: const BorderSide(color: Colors.purple),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
                   ),
 
                   const SizedBox(width: 8),
 
-                  // VERSIONS BUTTON
+                  // VERSIONS BUTTON - shows document versions
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _showDocumentVersions(document),
                       icon: const Icon(Icons.history, size: 18),
-                      label: const Text(
-                        'Versions',
-                        style: TextStyle(fontSize: 12),
-                      ),
+                      label: const Text('Versions'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.blue,
                         side: const BorderSide(color: Colors.blue),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  // DISABLED DOWNLOAD BUTTON (with popup) - FIXED SIZE
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _showDownloadRestrictedPopup(context),
-                      icon: Icon(
-                        Icons.download,
-                        size: 18,
-                        color: Colors.grey.shade500,
-                      ),
-                      label: Text(
-                        'Download',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey.shade500,
-                        side: BorderSide(
-                          color: Colors.grey.shade400,
-                          width: 1.5,
-                        ),
-                        backgroundColor: Colors.grey.shade100,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        // Disabled state styling
-                        disabledForegroundColor: Colors.grey.shade500,
-                        disabledBackgroundColor: Colors.grey.shade100,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
                   ),
                 ],
-              ),
-
-              // Tap hint (updated)
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text(
-                  'Tap card or click "View" button',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey.shade500,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  // Helper method to build detail row (for the card above)
+  Widget _buildDetailRow(String label, String value, IconData iconData) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(iconData, size: 16, color: Colors.grey.shade600),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Format date to DD-MM-YYYY - Fixed to handle both YYYY-MM-DD and DD/MM/YYYY formats
+  String _formatDateDDMMYYYY(dynamic date) {
+    try {
+      if (date == null || date.toString().isEmpty) {
+        return 'N/A';
+      }
+
+      final dateStr = date.toString().trim();
+
+      // Check if date is in DD/MM/YYYY format (e.g., "29/10/2025")
+      if (dateStr.contains('/')) {
+        final parts = dateStr.split('/');
+        if (parts.length >= 3) {
+          final day = parts[0].padLeft(2, '0');
+          final month = parts[1].padLeft(2, '0');
+          final year = parts[2];
+          return '$day-$month-$year';
+        }
+      }
+
+      // Check if date is in YYYY-MM-DD format (e.g., "2025-10-29")
+      if (dateStr.contains('-')) {
+        final parts = dateStr.split('-');
+        if (parts.length >= 3) {
+          // If first part is 4 digits, assume YYYY-MM-DD format
+          if (parts[0].length == 4) {
+            final year = parts[0];
+            final month = parts[1].padLeft(2, '0');
+            final day = parts[2].split(' ')[0].padLeft(2, '0');
+            return '$day-$month-$year';
+          } else {
+            // Assume DD-MM-YYYY format
+            final day = parts[0].padLeft(2, '0');
+            final month = parts[1].padLeft(2, '0');
+            final year = parts[2];
+            return '$day-$month-$year';
+          }
+        }
+      }
+
+      // Try to parse as DateTime
+      try {
+        final dateTime = DateTime.parse(dateStr);
+        final day = dateTime.day.toString().padLeft(2, '0');
+        final month = dateTime.month.toString().padLeft(2, '0');
+        final year = dateTime.year.toString();
+        return '$day-$month-$year';
+      } catch (e) {
+        // If parsing fails, return original string
+        return dateStr;
+      }
+    } catch (e) {
+      debugPrint('Error formatting date: $e for input: $date');
+      return date.toString();
+    }
   }
 
   void _showDownloadRestrictedPopup(BuildContext context) {

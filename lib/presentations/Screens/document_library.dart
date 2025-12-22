@@ -158,12 +158,21 @@ class _DocumentLibraryState extends State<DocumentLibrary>
       _searchQuery = query;
       _filteredDocuments = _publicDocuments.where((doc) {
         return doc.name.toLowerCase().contains(lowercaseQuery) ||
-            doc.keyword.toLowerCase().contains(lowercaseQuery) ||
+            (doc.keyword.isNotEmpty &&
+                doc.keyword.toLowerCase().contains(lowercaseQuery)) ||
             doc.type.toLowerCase().contains(lowercaseQuery) ||
-            doc.owner.toLowerCase().contains(lowercaseQuery) ||
-            doc.folder.toLowerCase().contains(lowercaseQuery);
+            (doc.owner.isNotEmpty &&
+                doc.owner.toLowerCase().contains(lowercaseQuery)) ||
+            (doc.folder.isNotEmpty &&
+                doc.folder.toLowerCase().contains(lowercaseQuery));
       }).toList();
     });
+  }
+
+  /// Clear search and reset filter
+  void _clearSearch() {
+    _searchController.clear();
+    _filterDocuments('');
   }
 
   List<Document> get _finalFilteredDocuments {
@@ -195,8 +204,152 @@ class _DocumentLibraryState extends State<DocumentLibrary>
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // Search and Filter Section in Single Row (70% search, 30% filter)
-          _buildSearchAndFilterSection(),
+          // Header Section - Same as Shared Me screen
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.indigo.shade50,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(20),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Title
+                const Text(
+                  'Document Library',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.indigo,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Subtitle
+                const Text(
+                  'Browse and search public documents shared by all users',
+                  style: TextStyle(fontSize: 14, color: Colors.indigo),
+                ),
+                const SizedBox(height: 20),
+
+                // Search and Filter Row
+                Row(
+                  children: [
+                    // Search Bar - 70% width
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withAlpha(10),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: _filterDocuments,
+                          maxLines: 1,
+                          decoration: InputDecoration(
+                            hintText: 'Search library documents...',
+                            hintStyle: TextStyle(color: Colors.grey.shade600),
+                            prefixIcon: const Icon(
+                              Icons.search,
+                              color: Colors.indigo,
+                            ),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    color: Colors.grey,
+                                    onPressed: _clearSearch,
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 14,
+                              horizontal: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // Filter Dropdown - 30% width
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 120),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withAlpha(10),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: DropdownButton<String>(
+                          value: _selectedFilter,
+                          underline: const SizedBox(),
+                          icon: const Icon(
+                            Icons.filter_list,
+                            color: Colors.indigo,
+                          ),
+                          isExpanded: true,
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'All',
+                              child: Text('Filter'),
+                            ),
+                            DropdownMenuItem(value: 'PDF', child: Text('PDF')),
+                            DropdownMenuItem(
+                              value: 'DOCX',
+                              child: Text('Word'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'XLSX',
+                              child: Text('Excel'),
+                            ),
+                            DropdownMenuItem(value: 'PPTX', child: Text('PPT')),
+                            DropdownMenuItem(
+                              value: 'IMAGE',
+                              child: Text('Images'),
+                            ),
+                            DropdownMenuItem(value: 'TXT', child: Text('Text')),
+                          ],
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedFilter = value!;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
 
           // Documents Count and Filter Info
           if (_searchQuery.isNotEmpty || _selectedFilter != 'All')
@@ -212,83 +365,6 @@ class _DocumentLibraryState extends State<DocumentLibrary>
                 : _finalFilteredDocuments.isEmpty
                 ? _buildEmptyState()
                 : _buildDocumentsList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchAndFilterSection() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: Colors.grey.shade100,
-      child: Row(
-        children: [
-          // Search Bar - 70% width
-          Expanded(
-            flex: 7,
-            child: TextField(
-              controller: _searchController,
-              onChanged: _filterDocuments,
-              decoration: InputDecoration(
-                hintText: 'Search library documents...',
-                prefixIcon: const Icon(Icons.search, color: Colors.indigo),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.grey),
-                        onPressed: () {
-                          _searchController.clear();
-                          _filterDocuments('');
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // Filter Dropdown - 30% width
-          Expanded(
-            flex: 3,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: DropdownButton<String>(
-                value: _selectedFilter,
-                underline: const SizedBox(),
-                icon: const Icon(Icons.filter_list, color: Colors.indigo),
-                isExpanded: true,
-                items: const [
-                  DropdownMenuItem(value: 'All', child: Text('Filter')),
-                  DropdownMenuItem(value: 'PDF', child: Text('PDF')),
-                  DropdownMenuItem(value: 'DOCX', child: Text('Word')),
-                  DropdownMenuItem(value: 'XLSX', child: Text('Excel')),
-                  DropdownMenuItem(value: 'PPTX', child: Text('PPT')),
-                  DropdownMenuItem(value: 'IMAGE', child: Text('Images')),
-                  DropdownMenuItem(value: 'TXT', child: Text('Text')),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedFilter = value!;
-                  });
-                },
-              ),
-            ),
           ),
         ],
       ),
@@ -454,7 +530,7 @@ class _DocumentLibraryState extends State<DocumentLibrary>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Type: ${document.type} • $formattedDate',
+                          'Type: ${document.type}',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade600,
@@ -586,13 +662,15 @@ class _DocumentLibraryState extends State<DocumentLibrary>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            _searchQuery.isEmpty ? Icons.folder_open : Icons.search_off,
+            _searchController.text.isEmpty
+                ? Icons.folder_open
+                : Icons.search_off,
             size: 80,
             color: Colors.grey.shade400,
           ),
           const SizedBox(height: 20),
           Text(
-            _searchQuery.isEmpty
+            _searchController.text.isEmpty
                 ? 'Document Library Empty'
                 : 'No Documents Found',
             style: const TextStyle(
@@ -607,22 +685,17 @@ class _DocumentLibraryState extends State<DocumentLibrary>
             child: Text(
               _hasError
                   ? _errorMessage
-                  : _searchQuery.isEmpty
+                  : _searchController.text.isEmpty
                   ? 'No public documents available in the library yet'
-                  : 'No documents found for "$_searchQuery"',
+                  : 'No documents found for "${_searchController.text}"',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
           ),
           const SizedBox(height: 20),
-          if (_searchQuery.isNotEmpty)
+          if (_searchController.text.isNotEmpty)
             ElevatedButton.icon(
-              onPressed: () {
-                setState(() {
-                  _searchController.clear();
-                  _filterDocuments('');
-                });
-              },
+              onPressed: _clearSearch,
               icon: const Icon(Icons.clear_all),
               label: const Text('Clear Search'),
               style: ElevatedButton.styleFrom(
@@ -728,26 +801,59 @@ class _DocumentLibraryState extends State<DocumentLibrary>
     }
   }
 
-  // Format date to DD-MM-YYYY
+  // Format date to DD-MM-YYYY - Fixed to handle both YYYY-MM-DD and DD/MM/YYYY formats
   String _formatDateDDMMYYYY(dynamic date) {
     try {
-      final dateTime = DateTime.parse(date.toString());
-      final day = dateTime.day.toString().padLeft(2, '0');
-      final month = dateTime.month.toString().padLeft(2, '0');
-      final year = dateTime.year.toString();
-      return '$day-$month-$year';
-    } catch (e) {
-      debugPrint('Error formatting date: $e for input: $date');
-      // Try to handle other date formats
-      if (date.toString().contains('-')) {
-        final parts = date.toString().split('-');
+      if (date == null || date.toString().isEmpty) {
+        return 'N/A';
+      }
+
+      final dateStr = date.toString().trim();
+
+      // Check if date is in DD/MM/YYYY format (e.g., "29/10/2025")
+      if (dateStr.contains('/')) {
+        final parts = dateStr.split('/');
         if (parts.length >= 3) {
-          final day = parts[2].split(' ')[0].padLeft(2, '0');
+          final day = parts[0].padLeft(2, '0');
           final month = parts[1].padLeft(2, '0');
-          final year = parts[0];
+          final year = parts[2];
           return '$day-$month-$year';
         }
       }
+
+      // Check if date is in YYYY-MM-DD format (e.g., "2025-10-29")
+      if (dateStr.contains('-')) {
+        final parts = dateStr.split('-');
+        if (parts.length >= 3) {
+          // If first part is 4 digits, assume YYYY-MM-DD format
+          if (parts[0].length == 4) {
+            final year = parts[0];
+            final month = parts[1].padLeft(2, '0');
+            final day = parts[2].split(' ')[0].padLeft(2, '0');
+            return '$day-$month-$year';
+          } else {
+            // Assume DD-MM-YYYY format
+            final day = parts[0].padLeft(2, '0');
+            final month = parts[1].padLeft(2, '0');
+            final year = parts[2];
+            return '$day-$month-$year';
+          }
+        }
+      }
+
+      // Try to parse as DateTime
+      try {
+        final dateTime = DateTime.parse(dateStr);
+        final day = dateTime.day.toString().padLeft(2, '0');
+        final month = dateTime.month.toString().padLeft(2, '0');
+        final year = dateTime.year.toString();
+        return '$day-$month-$year';
+      } catch (e) {
+        // If parsing fails, return original string
+        return dateStr;
+      }
+    } catch (e) {
+      debugPrint('Error formatting date: $e for input: $date');
       return date.toString();
     }
   }
