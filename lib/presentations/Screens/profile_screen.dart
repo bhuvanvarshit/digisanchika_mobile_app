@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:digi_sanchika/services/profile_service.dart';
 import 'package:digi_sanchika/models/profile.dart';
+import 'package:digi_sanchika/presentations/Screens/notifications_screen.dart'; // Add this import
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -72,6 +73,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       return dateString;
     }
+  }
+
+  // Navigate to Notifications screen
+  void _navigateToNotifications() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+    );
   }
 
   // Show logout confirmation dialog
@@ -285,6 +294,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          // Bell Icon for Notifications
+          IconButton(
+            onPressed: _navigateToNotifications,
+            icon: Stack(
+              children: [
+                const Icon(Icons.notifications_outlined, size: 24),
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 14,
+                      minHeight: 14,
+                    ),
+                    child: const Text(
+                      '3',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            tooltip: 'Notifications',
+          ),
+          // Refresh Icon
           IconButton(
             onPressed: _loadUserProfile,
             icon: const Icon(Icons.refresh),

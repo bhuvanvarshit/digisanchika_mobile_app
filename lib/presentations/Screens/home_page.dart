@@ -24,6 +24,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:digi_sanchika/presentations/Screens/profile_screen.dart';
 import 'package:digi_sanchika/services/document_opener_service.dart';
 
+// Add this enum for layout modes
+enum ViewMode { list, grid2x2, grid3x3, compact, detailed }
+
 class HomePage extends StatefulWidget {
   final String? userName;
   final String? userEmail;
@@ -53,18 +56,21 @@ class _HomePageState extends State<HomePage>
   Document? _selectedDocument;
   String? _downloadingFileName;
 
-  @override
+  Map<String, bool> _expandedStates = {};
+
+  // Add these variables for layout modes
+  ViewMode _currentViewMode = ViewMode.list;
+  bool _showLayoutOptions = false;
+
   @override
   void initState() {
     super.initState();
-    // CHANGE FROM 4 to 3 tabs
     _tabController = TabController(length: 3, vsync: this);
     _loadInitialData();
     _initializeBackend();
 
     _tabController.addListener(() {
       if (_tabController.index == 1) {
-        // This is now the Hub tab instead of Library
         setState(() {});
       } else if (_tabController.index == 0) {
         _refreshData();
@@ -1062,7 +1068,7 @@ class _HomePageState extends State<HomePage>
       String day = parsedDate.day.toString().padLeft(2, '0');
       String month = parsedDate.month.toString().padLeft(2, '0');
       String year = parsedDate.year.toString();
-      return '$day $month $year'; // Changed from '${parsedDate.day}/${parsedDate.month}/${parsedDate.year}'
+      return '$day $month $year';
     } catch (e) {
       return date.toString();
     }
@@ -1347,60 +1353,6 @@ class _HomePageState extends State<HomePage>
         return ext.replaceAll('.', '').toUpperCase();
     }
   }
-
-  // Future<void> _quickUpload() async {
-  //   FilePickerResult? result = await FilePicker.platform.pickFiles(
-  //     allowMultiple: true,
-  //   );
-
-  //   if (result != null) {
-  //     setState(() {
-  //       _isUploading = true;
-  //     });
-
-  //     try {
-  //       for (var file in result.files) {
-  //         final document = Document(
-  //           id: DateTime.now().millisecondsSinceEpoch.toString(),
-  //           name: file.name,
-  //           type: _extractFileType(file.name),
-  //           size: '${file.size} bytes',
-  //           keyword: '',
-  //           uploadDate: DateTime.now().toString(),
-  //           owner: widget.userName ?? 'User',
-  //           details: '',
-  //           classification: 'General',
-  //           allowDownload: true,
-  //           sharingType: 'Private',
-  //           folder: 'Home',
-  //           folderId: null,
-  //           path: file.name,
-  //           fileType: _extractFileType(file.name),
-  //         );
-
-  //         _addNewDocument(document);
-  //       }
-
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(
-  //           content: Text('Uploaded ${result.files.length} files'),
-  //           backgroundColor: Colors.green,
-  //         ),
-  //       );
-  //     } catch (e) {
-  //       ScaffoldMessenger.of(context).showSnackBar(
-  //         SnackBar(
-  //           content: Text('Upload failed: $e'),
-  //           backgroundColor: Colors.red,
-  //         ),
-  //       );
-  //     } finally {
-  //       setState(() {
-  //         _isUploading = false;
-  //       });
-  //     }
-  //   }
-  // }
 
   @override
   void dispose() {
@@ -1786,11 +1738,10 @@ class _HomePageState extends State<HomePage>
             fontSize: 13,
           ),
           unselectedLabelStyle: const TextStyle(fontSize: 13),
-          // CHANGE THESE TABS:
           tabs: const [
-            Tab(text: 'My Documents'), // Tab 0
-            Tab(text: 'Document Hub'), // Tab 1 (replaces Library & Shared)
-            Tab(text: 'Upload Docs'), // Tab 2
+            Tab(text: 'My Documents'),
+            Tab(text: 'Document Hub'),
+            Tab(text: 'Upload Docs'),
           ],
         ),
       ),
@@ -1799,10 +1750,9 @@ class _HomePageState extends State<HomePage>
           TabBarView(
             controller: _tabController,
             children: [
-              _buildMyDocumentsTab(), // Tab 0: My Documents
-              const DocumentsHub(), // Tab 1: NEW - Just use your DocumentsHub screen
+              _buildMyDocumentsTab(),
+              const DocumentsHub(),
               UploadDocumentTab(
-                // Tab 2: Upload
                 onDocumentUploaded: _addNewDocument,
                 folders: folders,
                 userName: widget.userName,
@@ -1819,7 +1769,6 @@ class _HomePageState extends State<HomePage>
               child: Container(color: Colors.black.withAlpha(30)),
             ),
 
-          // Profile Sidebar
           if (_showProfileDrawer) _buildProfileSidebar(),
         ],
       ),
@@ -1878,14 +1827,6 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
               const SizedBox(width: 8),
-              // IconButton(
-              //   onPressed: _quickUpload,
-              //   icon: const Icon(Icons.upload, color: Colors.indigo),
-              //   style: IconButton.styleFrom(
-              //     backgroundColor: Colors.white,
-              //     padding: const EdgeInsets.all(12),
-              //   ),
-              // ),
             ],
           ),
         ),
@@ -1927,6 +1868,8 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
               const SizedBox(width: 12),
+              // Layout selector button
+              Container(width: 40, child: _buildLayoutSelector()),
             ],
           ),
         ),
@@ -1941,6 +1884,100 @@ class _HomePageState extends State<HomePage>
         ),
       ],
     );
+  }
+
+  /// Method to build layout selector
+  Widget _buildLayoutSelector() {
+    return PopupMenuButton<ViewMode>(
+      tooltip: 'Change Layout',
+      icon: Icon(
+        _getViewModeIcon(_currentViewMode),
+        color: Colors.indigo,
+        size: 24,
+      ),
+      onSelected: (ViewMode mode) {
+        setState(() {
+          _currentViewMode = mode;
+        });
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<ViewMode>>[
+        PopupMenuItem<ViewMode>(
+          value: ViewMode.list,
+          child: Row(
+            children: [
+              Icon(Icons.list, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('List View'),
+              if (_currentViewMode == ViewMode.list)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem<ViewMode>(
+          value: ViewMode.grid2x2,
+          child: Row(
+            children: [
+              Icon(Icons.grid_on, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Grid (2x2)'),
+              if (_currentViewMode == ViewMode.grid2x2)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem<ViewMode>(
+          value: ViewMode.grid3x3,
+          child: Row(
+            children: [
+              Icon(Icons.view_module, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Grid (3x3)'),
+              if (_currentViewMode == ViewMode.grid3x3)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem<ViewMode>(
+          value: ViewMode.compact,
+          child: Row(
+            children: [
+              Icon(Icons.view_headline, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Compact View'),
+              if (_currentViewMode == ViewMode.compact)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem<ViewMode>(
+          value: ViewMode.detailed,
+          child: Row(
+            children: [
+              Icon(Icons.table_rows, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Detailed View'),
+              if (_currentViewMode == ViewMode.detailed)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _getViewModeIcon(ViewMode mode) {
+    switch (mode) {
+      case ViewMode.list:
+        return Icons.list;
+      case ViewMode.grid2x2:
+        return Icons.grid_on;
+      case ViewMode.grid3x3:
+        return Icons.view_module;
+      case ViewMode.compact:
+        return Icons.view_headline;
+      case ViewMode.detailed:
+        return Icons.table_rows;
+    }
   }
 
   Widget _buildOfflineBanner() {
@@ -2140,23 +2177,76 @@ class _HomePageState extends State<HomePage>
                               ),
                             ),
                           )
-                        : ListView.builder(
-                            shrinkWrap: true,
-                            physics: const BouncingScrollPhysics(),
-                            itemCount: displayFolders.length,
-                            itemBuilder: (context, index) {
-                              return _buildFolderListItem(
-                                displayFolders[index],
-                                index,
-                              );
-                            },
-                          ),
+                        : _buildFolderContent(displayFolders),
                   )
                 : null,
           ),
         ],
       ),
     );
+  }
+
+  /// Method to build folder content based on view mode
+  Widget _buildFolderContent(List<Folder> folders) {
+    switch (_currentViewMode) {
+      case ViewMode.list:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const BouncingScrollPhysics(),
+          itemCount: folders.length,
+          itemBuilder: (context, index) {
+            return _buildFolderListItem(folders[index], index);
+          },
+        );
+      case ViewMode.grid2x2:
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const BouncingScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.2,
+          ),
+          itemCount: folders.length,
+          itemBuilder: (context, index) {
+            return _buildFolderGridItem(folders[index], index, 2);
+          },
+        );
+      case ViewMode.grid3x3:
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const BouncingScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 1.1,
+          ),
+          itemCount: folders.length,
+          itemBuilder: (context, index) {
+            return _buildFolderGridItem(folders[index], index, 3);
+          },
+        );
+      case ViewMode.compact:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const BouncingScrollPhysics(),
+          itemCount: folders.length,
+          itemBuilder: (context, index) {
+            return _buildFolderCompactItem(folders[index], index);
+          },
+        );
+      case ViewMode.detailed:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const BouncingScrollPhysics(),
+          itemCount: folders.length,
+          itemBuilder: (context, index) {
+            return _buildFolderDetailedItem(folders[index], index);
+          },
+        );
+    }
   }
 
   Widget _buildDocumentsSection(List<Document> filteredDocuments) {
@@ -2214,23 +2304,762 @@ class _HomePageState extends State<HomePage>
           _showDocumentsDropdown
               ? (filteredDocuments.isEmpty
                     ? _buildEmptyState()
-                    : ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: filteredDocuments.length,
-                        itemBuilder: (context, index) {
-                          return _buildDocumentCard(
-                            filteredDocuments[index],
-                            index,
-                          );
-                        },
-                      ))
+                    : _buildDocumentsContent(filteredDocuments))
               : Container(),
         ],
       ),
     );
   }
 
+  /// Method to build documents content based on view mode
+  Widget _buildDocumentsContent(List<Document> documents) {
+    switch (_currentViewMode) {
+      case ViewMode.list:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: documents.length,
+          itemBuilder: (context, index) {
+            return _buildDocumentCard(documents[index], index);
+          },
+        );
+      case ViewMode.grid2x2:
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 0.9,
+          ),
+          itemCount: documents.length,
+          itemBuilder: (context, index) {
+            return _buildDocumentGridItem(documents[index], index, 2);
+          },
+        );
+      case ViewMode.grid3x3:
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 0.85,
+          ),
+          itemCount: documents.length,
+          itemBuilder: (context, index) {
+            return _buildDocumentGridItem(documents[index], index, 3);
+          },
+        );
+      case ViewMode.compact:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: documents.length,
+          itemBuilder: (context, index) {
+            return _buildDocumentCompactItem(documents[index], index);
+          },
+        );
+      case ViewMode.detailed:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: documents.length,
+          itemBuilder: (context, index) {
+            return _buildDocumentDetailedItem(documents[index], index);
+          },
+        );
+    }
+  }
+
+  // NEW: Folder Grid Item (for 2x2 and 3x3 views) - FIXED
+  Widget _buildFolderGridItem(Folder folder, int index, int columns) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => FolderScreen(
+                folderId: folder.id,
+                folderName: folder.name,
+                userName: widget.userName,
+              ),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(8), // Reduced padding
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: EdgeInsets.all(columns == 2 ? 12 : 8), // Reduced sizes
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.folder,
+                  color: Colors.amber.shade700,
+                  size: columns == 2 ? 28 : 20, // Reduced icon sizes
+                ),
+              ),
+              const SizedBox(height: 6), // Reduced spacing
+              Flexible(
+                // ADDED: Flexible widget
+                child: Text(
+                  folder.name,
+                  style: TextStyle(
+                    fontSize: columns == 2 ? 12 : 10, // Reduced font sizes
+                    fontWeight: FontWeight.w600,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (columns == 2) ...[
+                const SizedBox(height: 2), // Reduced spacing
+                Text(
+                  '${folder.documents.length} items',
+                  style: TextStyle(
+                    fontSize: 9, // Reduced font size
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // NEW: Folder Compact Item
+  Widget _buildFolderCompactItem(Folder folder, int index) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        elevation: 1,
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => FolderScreen(
+                  folderId: folder.id,
+                  folderName: folder.name,
+                  userName: widget.userName,
+                ),
+              ),
+            );
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade200, width: 1),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.folder, color: Colors.amber.shade700, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    folder.name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${folder.documents.length}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // NEW: Folder Detailed Item
+  // NEW: Folder Detailed Item - FIXED
+  Widget _buildFolderDetailedItem(Folder folder, int index) {
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => FolderScreen(
+                folderId: folder.id,
+                folderName: folder.name,
+                userName: widget.userName,
+              ),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12), // Reduced padding
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10), // Reduced padding
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.folder,
+                  color: Colors.amber.shade700,
+                  size: 24, // Reduced size
+                ),
+              ),
+              const SizedBox(width: 12), // Reduced spacing
+              Expanded(
+                // ADDED: Expanded widget to prevent overflow
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, // ADDED
+                  children: [
+                    Text(
+                      folder.name,
+                      style: const TextStyle(
+                        fontSize: 14, // Reduced font size
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      // CHANGED: Row to Wrap for better overflow handling
+                      spacing: 8, // Reduced spacing
+                      runSpacing: 4,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.insert_drive_file,
+                              size: 12,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${folder.documents.length} docs',
+                              style: TextStyle(
+                                fontSize: 11, // Reduced font size
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.person, size: 12, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              folder.owner,
+                              style: TextStyle(
+                                fontSize: 11, // Reduced font size
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Created: ${_formatDate(folder.createdAt.toString())}',
+                      style: TextStyle(
+                        fontSize: 10, // Reduced font size
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton(
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'share',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.share,
+                          size: 18,
+                          color: Colors.blue,
+                        ), // Reduced icon size
+                        SizedBox(width: 6),
+                        Text(
+                          'Share',
+                          style: TextStyle(fontSize: 13),
+                        ), // Reduced font size
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.delete,
+                          size: 18,
+                          color: Colors.red,
+                        ), // Reduced icon size
+                        SizedBox(width: 6),
+                        Text(
+                          'Delete',
+                          style: TextStyle(fontSize: 13),
+                        ), // Reduced font size
+                      ],
+                    ),
+                  ),
+                ],
+                onSelected: (value) {
+                  if (value == 'share') {
+                    _showFolderShareDialog(folder);
+                  } else if (value == 'delete') {
+                    _showDeleteFolderConfirmation(context, index);
+                  }
+                },
+                child: Container(
+                  width: 32, // Reduced size
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.more_vert,
+                    size: 16, // Reduced icon size
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // NEW: Document Grid Item (for 2x2 and 3x3 views)
+  Widget _buildDocumentGridItem(Document document, int index, int columns) {
+    final docIcons = {
+      'PDF': Icons.picture_as_pdf,
+      'DOCX': Icons.description,
+      'XLSX': Icons.table_chart,
+      'PPTX': Icons.slideshow,
+      'TXT': Icons.text_snippet,
+      'XLS': Icons.table_chart,
+      'PPT': Icons.slideshow,
+      'DOC': Icons.description,
+    };
+    final docColors = {
+      'PDF': Colors.red,
+      'DOCX': Colors.blue,
+      'XLSX': Colors.green,
+      'PPTX': Colors.orange,
+      'TXT': Colors.grey,
+      'PPT': Colors.orange,
+      'XLS': Colors.green,
+      'DOC': Colors.blue,
+    };
+
+    String fileType = document.type.toUpperCase();
+    IconData icon = docIcons[fileType] ?? Icons.insert_drive_file;
+    Color color = docColors[fileType] ?? Colors.indigo;
+    final documentOpener = DocumentOpenerService();
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => documentOpener.handleDoubleTap(
+          context: context,
+          document: document,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: EdgeInsets.all(columns == 2 ? 16 : 12),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(20),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: columns == 2 ? 32 : 24),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                document.name,
+                style: TextStyle(
+                  fontSize: columns == 2 ? 13 : 11,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: columns == 2 ? 2 : 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                document.type,
+                style: TextStyle(
+                  fontSize: columns == 2 ? 11 : 10,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              if (columns == 2) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _formatToDDMMYYYY(document.uploadDate),
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // NEW: Document Compact Item
+  Widget _buildDocumentCompactItem(Document document, int index) {
+    final documentOpener = DocumentOpenerService();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        elevation: 0.5,
+        child: InkWell(
+          onTap: () => documentOpener.handleDoubleTap(
+            context: context,
+            document: document,
+          ),
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.grey.shade100, width: 1),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _getDocumentIcon(document.type),
+                  color: _getDocumentColor(document.type),
+                  size: 18,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    document.name,
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _formatToDDMMYYYY(document.uploadDate),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // NEW: Document Detailed Item
+  Widget _buildDocumentDetailedItem(Document document, int index) {
+    final docIcons = {
+      'PDF': Icons.picture_as_pdf,
+      'DOCX': Icons.description,
+      'XLSX': Icons.table_chart,
+      'PPTX': Icons.slideshow,
+      'TXT': Icons.text_snippet,
+      'XLS': Icons.table_chart,
+      'PPT': Icons.slideshow,
+      'DOC': Icons.description,
+    };
+    final docColors = {
+      'PDF': Colors.red,
+      'DOCX': Colors.blue,
+      'XLSX': Colors.green,
+      'PPTX': Colors.orange,
+      'TXT': Colors.grey,
+      'PPT': Colors.orange,
+      'XLS': Colors.green,
+      'DOC': Colors.blue,
+    };
+
+    String fileType = document.type.toUpperCase();
+    IconData icon = docIcons[fileType] ?? Icons.insert_drive_file;
+    Color color = docColors[fileType] ?? Colors.indigo;
+    final documentOpener = DocumentOpenerService();
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => documentOpener.handleDoubleTap(
+          context: context,
+          document: document,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(20),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, color: color, size: 28),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          document.name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(Icons.person, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              document.owner,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Icon(Icons.folder, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              document.folder,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.calendar_today,
+                              size: 14,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              _formatToDDMMYYYY(document.uploadDate),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Icon(Icons.security, size: 14, color: Colors.grey),
+                            const SizedBox(width: 4),
+                            Text(
+                              document.classification,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'share',
+                        child: Row(
+                          children: [
+                            Icon(Icons.share, size: 20, color: Colors.blue),
+                            SizedBox(width: 8),
+                            Text('Share'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, size: 20, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    onSelected: (value) {
+                      if (value == 'share') {
+                        _showShareDialog(document);
+                      } else if (value == 'delete') {
+                        _showDeleteConfirmation(context, index);
+                      }
+                    },
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.more_vert,
+                        size: 18,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => documentOpener.handleDoubleTap(
+                        context: context,
+                        document: document,
+                      ),
+                      icon: Icon(
+                        Icons.visibility,
+                        size: 16,
+                        color: Colors.purple,
+                      ),
+                      label: Text(
+                        'View',
+                        style: TextStyle(color: Colors.purple),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.purple),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _showDocumentVersions(document),
+                      icon: Icon(Icons.history, size: 16, color: Colors.blue),
+                      label: Text(
+                        'Versions',
+                        style: TextStyle(color: Colors.blue),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.blue),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _downloadDocument(document),
+                      icon: Icon(Icons.download, size: 16, color: Colors.green),
+                      label: Text(
+                        'Download',
+                        style: TextStyle(color: Colors.green),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.green),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _getDocumentIcon(String fileType) {
+    final docIcons = {
+      'PDF': Icons.picture_as_pdf,
+      'DOCX': Icons.description,
+      'XLSX': Icons.table_chart,
+      'PPTX': Icons.slideshow,
+      'TXT': Icons.text_snippet,
+      'XLS': Icons.table_chart,
+      'PPT': Icons.slideshow,
+      'DOC': Icons.description,
+    };
+    return docIcons[fileType.toUpperCase()] ?? Icons.insert_drive_file;
+  }
+
+  Color _getDocumentColor(String fileType) {
+    final docColors = {
+      'PDF': Colors.red,
+      'DOCX': Colors.blue,
+      'XLSX': Colors.green,
+      'PPTX': Colors.orange,
+      'TXT': Colors.grey,
+      'PPT': Colors.orange,
+      'XLS': Colors.green,
+      'DOC': Colors.blue,
+    };
+    return docColors[fileType.toUpperCase()] ?? Colors.indigo;
+  }
+
+  // Original folder list item (updated)
   Widget _buildFolderListItem(Folder folder, int index) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -2343,7 +3172,7 @@ class _HomePageState extends State<HomePage>
     );
   }
 
-  // In the _buildDocumentCard method, update the document info section:
+  // Original document card (updated)
   Widget _buildDocumentCard(Document document, int index) {
     final docIcons = {
       'PDF': Icons.picture_as_pdf,
@@ -2376,6 +3205,9 @@ class _HomePageState extends State<HomePage>
     // Get document opener service instance
     final documentOpener = DocumentOpenerService();
 
+    // IMPORTANT: Check if this specific document is expanded using its ID
+    bool isExpanded = _expandedStates[document.id] ?? false;
+
     return InkWell(
       onTap: () =>
           documentOpener.handleDoubleTap(context: context, document: document),
@@ -2389,7 +3221,7 @@ class _HomePageState extends State<HomePage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top row with icon, document info, and more options button
+              // Top row with icon, document info, and expand/collapse button
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2406,18 +3238,119 @@ class _HomePageState extends State<HomePage>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          document.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                document.name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: isExpanded ? 2 : 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            // INNOVATIVE EXPAND/COLLAPSE BUTTON
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  // Toggle only this specific document using its ID
+                                  _expandedStates[document.id] = !isExpanded;
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: isExpanded
+                                      ? color.withAlpha(20)
+                                      : Colors.grey.shade100,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isExpanded
+                                        ? color.withAlpha(100)
+                                        : Colors.transparent,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: AnimatedRotation(
+                                    duration: const Duration(milliseconds: 300),
+                                    turns: isExpanded ? 0.5 : 0,
+                                    child: Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      size: 22,
+                                      color: isExpanded
+                                          ? color
+                                          : Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Vertical More Options Button (Three Dots) - Kept from original
+                            PopupMenuButton<String>(
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'share',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.share,
+                                        size: 20,
+                                        color: Colors.blue,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text('Share'),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete,
+                                        size: 20,
+                                        color: Colors.red,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text('Delete'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              onSelected: (value) {
+                                if (value == 'share') {
+                                  _showShareDialog(document);
+                                } else if (value == 'delete') {
+                                  _showDeleteConfirmation(context, index);
+                                }
+                              },
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Icon(
+                                    Icons.more_vert,
+                                    size: 20,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Type: ${document.type} • $formattedDate', // Changed here
+                          'Type: ${document.type} • $formattedDate',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade600,
@@ -2426,128 +3359,103 @@ class _HomePageState extends State<HomePage>
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // Vertical More Options Button (Three Dots)
-                  PopupMenuButton<String>(
-                    itemBuilder: (context) => [
-                      PopupMenuItem(
-                        value: 'share',
-                        child: Row(
-                          children: [
-                            Icon(Icons.share, size: 20, color: Colors.blue),
-                            SizedBox(width: 8),
-                            Text('Share'),
-                          ],
-                        ),
+                ],
+              ),
+
+              // COLLAPSIBLE CONTENT SECTION
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                child: SizedBox(
+                  height: isExpanded ? null : 0,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 16),
+                      const Divider(height: 1),
+                      const SizedBox(height: 12),
+                      _buildDetailRow('Keyword', document.keyword, Icons.label),
+                      _buildDetailRow('Owner', document.owner, Icons.person),
+                      _buildDetailRow('Folder', document.folder, Icons.folder),
+                      _buildDetailRow(
+                        'Classification',
+                        document.classification,
+                        Icons.security,
                       ),
-                      PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete, size: 20, color: Colors.red),
-                            SizedBox(width: 8),
-                            Text('Delete'),
-                          ],
+                      _buildDetailRow(
+                        'Sharing',
+                        document.sharingType,
+                        Icons.share,
+                      ),
+                      if (document.details.isNotEmpty)
+                        _buildDetailRow(
+                          'Details',
+                          document.details,
+                          Icons.info_outline,
                         ),
+                      const SizedBox(height: 16),
+
+                      // ACTION BUTTONS ROW - Only View, Versions, and Download
+                      Row(
+                        children: [
+                          // VIEW BUTTON
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => documentOpener.handleDoubleTap(
+                                context: context,
+                                document: document,
+                              ),
+                              icon: const Icon(Icons.visibility, size: 18),
+                              label: const Text('View'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.purple,
+                                side: const BorderSide(color: Colors.purple),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(width: 8),
+
+                          // VERSIONS BUTTON
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showDocumentVersions(document),
+                              icon: const Icon(Icons.history, size: 18),
+                              label: const Text('Versions'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.blue,
+                                side: const BorderSide(color: Colors.blue),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(width: 8),
+
+                          // DOWNLOAD BUTTON
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _downloadDocument(document),
+                              icon: const Icon(Icons.download, size: 18),
+                              label: const Text('Download'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.green,
+                                side: const BorderSide(color: Colors.green),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                    onSelected: (value) {
-                      if (value == 'share') {
-                        _showShareDialog(document);
-                      } else if (value == 'delete') {
-                        _showDeleteConfirmation(context, index);
-                      }
-                    },
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.more_vert,
-                          size: 20,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              const Divider(height: 1),
-              const SizedBox(height: 12),
-              _buildDetailRow('Keyword', document.keyword, Icons.label),
-              _buildDetailRow('Owner', document.owner, Icons.person),
-              _buildDetailRow('Folder', document.folder, Icons.folder),
-              _buildDetailRow(
-                'Classification',
-                document.classification,
-                Icons.security,
-              ),
-              _buildDetailRow('Sharing', document.sharingType, Icons.share),
-              if (document.details.isNotEmpty)
-                _buildDetailRow(
-                  'Details',
-                  document.details,
-                  Icons.info_outline,
                 ),
-              const SizedBox(height: 16),
-
-              // ACTION BUTTONS ROW - Only View, Versions, and Download
-              Row(
-                children: [
-                  // VIEW BUTTON - opens the document (same as single tap)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => documentOpener.handleDoubleTap(
-                        context: context,
-                        document: document,
-                      ),
-                      icon: const Icon(Icons.visibility, size: 18),
-                      label: const Text('View'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.purple,
-                        side: const BorderSide(color: Colors.purple),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  // VERSIONS BUTTON - shows document versions
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _showDocumentVersions(document),
-                      icon: const Icon(Icons.history, size: 18),
-                      label: const Text('Versions'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.blue,
-                        side: const BorderSide(color: Colors.blue),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  // DOWNLOAD BUTTON
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _downloadDocument(document),
-                      icon: const Icon(Icons.download, size: 18),
-                      label: const Text('Download'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.green,
-                        side: const BorderSide(color: Colors.green),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ],
           ),
@@ -2573,8 +3481,6 @@ class _HomePageState extends State<HomePage>
       return dateString;
     }
   }
-
-  // Also update the _formatDate method in the _showDocumentVersions method
 
   Widget _buildDetailRow(String label, String value, IconData icon) {
     return Padding(
