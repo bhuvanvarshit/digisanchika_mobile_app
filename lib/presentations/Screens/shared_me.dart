@@ -1078,18 +1078,19 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.lock_outline, size: 48, color: Colors.orange),
-        title: const Text('Download Restricted'),
+        icon: const Icon(Icons.download_outlined, size: 48, color: Colors.blue),
+        title: const Text('Download Document'),
         content: const Text(
-          'Download access is restricted for this shared document. '
-          'Please contact the document owner or system administrator '
-          'to request download permissions.',
+          'For security purposes, library documents require approval for downloading. '
+          'Please reach out to your team administrator or the document owner '
+          'to request download permissions.\n\n'
+          'In the meantime, you can preview the document using the "View" option.',
           textAlign: TextAlign.center,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: const Text('Understand'),
           ),
         ],
       ),

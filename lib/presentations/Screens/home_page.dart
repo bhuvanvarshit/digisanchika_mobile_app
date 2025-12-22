@@ -762,7 +762,10 @@ class _HomePageState extends State<HomePage>
   String _formatDate(dynamic date) {
     try {
       DateTime parsedDate = DateTime.parse(date.toString());
-      return '${parsedDate.day}/${parsedDate.month}/${parsedDate.year}';
+      String day = parsedDate.day.toString().padLeft(2, '0');
+      String month = parsedDate.month.toString().padLeft(2, '0');
+      String year = parsedDate.year.toString();
+      return '$day $month $year'; // Changed from '${parsedDate.day}/${parsedDate.month}/${parsedDate.year}'
     } catch (e) {
       return date.toString();
     }
@@ -1048,59 +1051,59 @@ class _HomePageState extends State<HomePage>
     }
   }
 
-  Future<void> _quickUpload() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-    );
+  // Future<void> _quickUpload() async {
+  //   FilePickerResult? result = await FilePicker.platform.pickFiles(
+  //     allowMultiple: true,
+  //   );
 
-    if (result != null) {
-      setState(() {
-        _isUploading = true;
-      });
+  //   if (result != null) {
+  //     setState(() {
+  //       _isUploading = true;
+  //     });
 
-      try {
-        for (var file in result.files) {
-          final document = Document(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            name: file.name,
-            type: _extractFileType(file.name),
-            size: '${file.size} bytes',
-            keyword: '',
-            uploadDate: DateTime.now().toString(),
-            owner: widget.userName ?? 'User',
-            details: '',
-            classification: 'General',
-            allowDownload: true,
-            sharingType: 'Private',
-            folder: 'Home',
-            folderId: null,
-            path: file.name,
-            fileType: _extractFileType(file.name),
-          );
+  //     try {
+  //       for (var file in result.files) {
+  //         final document = Document(
+  //           id: DateTime.now().millisecondsSinceEpoch.toString(),
+  //           name: file.name,
+  //           type: _extractFileType(file.name),
+  //           size: '${file.size} bytes',
+  //           keyword: '',
+  //           uploadDate: DateTime.now().toString(),
+  //           owner: widget.userName ?? 'User',
+  //           details: '',
+  //           classification: 'General',
+  //           allowDownload: true,
+  //           sharingType: 'Private',
+  //           folder: 'Home',
+  //           folderId: null,
+  //           path: file.name,
+  //           fileType: _extractFileType(file.name),
+  //         );
 
-          _addNewDocument(document);
-        }
+  //         _addNewDocument(document);
+  //       }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Uploaded ${result.files.length} files'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Upload failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      } finally {
-        setState(() {
-          _isUploading = false;
-        });
-      }
-    }
-  }
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text('Uploaded ${result.files.length} files'),
+  //           backgroundColor: Colors.green,
+  //         ),
+  //       );
+  //     } catch (e) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(
+  //           content: Text('Upload failed: $e'),
+  //           backgroundColor: Colors.red,
+  //         ),
+  //       );
+  //     } finally {
+  //       setState(() {
+  //         _isUploading = false;
+  //       });
+  //     }
+  //   }
+  // }
 
   @override
   void dispose() {
@@ -1578,14 +1581,14 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton(
-                onPressed: _quickUpload,
-                icon: const Icon(Icons.upload, color: Colors.indigo),
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  padding: const EdgeInsets.all(12),
-                ),
-              ),
+              // IconButton(
+              //   onPressed: _quickUpload,
+              //   icon: const Icon(Icons.upload, color: Colors.indigo),
+              //   style: IconButton.styleFrom(
+              //     backgroundColor: Colors.white,
+              //     padding: const EdgeInsets.all(12),
+              //   ),
+              // ),
             ],
           ),
         ),
@@ -2043,6 +2046,7 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  // In the _buildDocumentCard method, update the document info section:
   Widget _buildDocumentCard(Document document, int index) {
     final docIcons = {
       'PDF': Icons.picture_as_pdf,
@@ -2069,14 +2073,15 @@ class _HomePageState extends State<HomePage>
     IconData icon = docIcons[fileType] ?? Icons.insert_drive_file;
     Color color = docColors[fileType] ?? Colors.indigo;
 
+    // Format the date to DD MM YYYY
+    String formattedDate = _formatToDDMMYYYY(document.uploadDate);
+
     // Get document opener service instance
     final documentOpener = DocumentOpenerService();
 
     return InkWell(
-      onTap: () => documentOpener.handleDoubleTap(
-        context: context,
-        document: document,
-      ), // SINGLE TAP TO OPEN DOCUMENT
+      onTap: () =>
+          documentOpener.handleDoubleTap(context: context, document: document),
       borderRadius: BorderRadius.circular(12),
       child: Card(
         margin: const EdgeInsets.only(bottom: 16),
@@ -2087,7 +2092,9 @@ class _HomePageState extends State<HomePage>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Top row with icon, document info, and more options button
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -2108,16 +2115,66 @@ class _HomePageState extends State<HomePage>
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          document.size,
+                          'Type: ${document.type} • $formattedDate', // Changed here
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11,
                             color: Colors.grey.shade600,
                           ),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Vertical More Options Button (Three Dots)
+                  PopupMenuButton<String>(
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'share',
+                        child: Row(
+                          children: [
+                            Icon(Icons.share, size: 20, color: Colors.blue),
+                            SizedBox(width: 8),
+                            Text('Share'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, size: 20, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete'),
+                          ],
+                        ),
+                      ),
+                    ],
+                    onSelected: (value) {
+                      if (value == 'share') {
+                        _showShareDialog(document);
+                      } else if (value == 'delete') {
+                        _showDeleteConfirmation(context, index);
+                      }
+                    },
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.more_vert,
+                          size: 20,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -2125,13 +2182,7 @@ class _HomePageState extends State<HomePage>
               const SizedBox(height: 16),
               const Divider(height: 1),
               const SizedBox(height: 12),
-              _buildDetailRow('Type', document.type, Icons.category),
               _buildDetailRow('Keyword', document.keyword, Icons.label),
-              _buildDetailRow(
-                'Upload Date',
-                document.uploadDate,
-                Icons.calendar_today,
-              ),
               _buildDetailRow('Owner', document.owner, Icons.person),
               _buildDetailRow('Folder', document.folder, Icons.folder),
               _buildDetailRow(
@@ -2148,7 +2199,7 @@ class _HomePageState extends State<HomePage>
                 ),
               const SizedBox(height: 16),
 
-              // ACTION BUTTONS ROW - Updated with View button
+              // ACTION BUTTONS ROW - Only View, Versions, and Download
               Row(
                 children: [
                   // VIEW BUTTON - opens the document (same as single tap)
@@ -2159,14 +2210,11 @@ class _HomePageState extends State<HomePage>
                         document: document,
                       ),
                       icon: const Icon(Icons.visibility, size: 18),
-                      label: const Padding(
-                        padding: EdgeInsets.only(right: 6),
-                        child: Text('View', style: TextStyle(fontSize: 12)),
-                      ),
+                      label: const Text('View'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.purple,
                         side: const BorderSide(color: Colors.purple),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
                   ),
@@ -2178,14 +2226,11 @@ class _HomePageState extends State<HomePage>
                     child: OutlinedButton.icon(
                       onPressed: () => _showDocumentVersions(document),
                       icon: const Icon(Icons.history, size: 18),
-                      label: const Padding(
-                        padding: EdgeInsets.only(right: 6),
-                        child: Text('Versions', style: TextStyle(fontSize: 12)),
-                      ),
+                      label: const Text('Versions'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.blue,
                         side: const BorderSide(color: Colors.blue),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
                     ),
                   ),
@@ -2196,44 +2241,13 @@ class _HomePageState extends State<HomePage>
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _downloadDocument(document),
-                      icon: const Padding(
-                        padding: EdgeInsets.only(left: 4),
-                        child: Icon(Icons.download, size: 14),
-                      ),
-                      label: const Padding(
-                        padding: EdgeInsets.only(right: 6),
-                        child: Text('Download', style: TextStyle(fontSize: 11)),
-                      ),
+                      icon: const Icon(Icons.download, size: 18),
+                      label: const Text('Download'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.green,
                         side: const BorderSide(color: Colors.green),
-                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  // SHARE BUTTON
-                  OutlinedButton.icon(
-                    onPressed: () => _showShareDialog(document),
-                    icon: const Icon(Icons.share, size: 18),
-                    label: const Text('Share'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.orange,
-                      side: const BorderSide(color: Colors.orange),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  // DELETE BUTTON (icon only)
-                  IconButton(
-                    onPressed: () => _showDeleteConfirmation(context, index),
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    style: IconButton.styleFrom(
-                      side: const BorderSide(color: Colors.red),
                     ),
                   ),
                 ],
@@ -2244,6 +2258,26 @@ class _HomePageState extends State<HomePage>
       ),
     );
   }
+
+  // Add this helper method to format dates to DD MM YYYY
+  String _formatToDDMMYYYY(String dateString) {
+    try {
+      // Try to parse the date string
+      DateTime date = DateTime.parse(dateString);
+
+      // Format as DD MM YYYY
+      String day = date.day.toString().padLeft(2, '0');
+      String month = date.month.toString().padLeft(2, '0');
+      String year = date.year.toString();
+
+      return '$day $month $year';
+    } catch (e) {
+      // If parsing fails, return the original string
+      return dateString;
+    }
+  }
+
+  // Also update the _formatDate method in the _showDocumentVersions method
 
   Widget _buildDetailRow(String label, String value, IconData icon) {
     return Padding(

@@ -611,7 +611,7 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
                   ),
                 ),
 
-              // Action buttons row (View + Versions + Download) - SAME AS SharedMeScreen
+              // Action buttons row (View + Versions + Download) - FIXED
               Row(
                 children: [
                   // VIEW BUTTON with visibility icon
@@ -619,10 +619,7 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () => _handleDocumentDoubleTap(document),
                       icon: const Icon(Icons.visibility, size: 18),
-                      label: const Padding(
-                        padding: EdgeInsets.only(right: 6),
-                        child: Text('View', style: TextStyle(fontSize: 12)),
-                      ),
+                      label: const Text('View', style: TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.purple,
                         side: const BorderSide(color: Colors.purple),
@@ -638,9 +635,9 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
                     child: OutlinedButton.icon(
                       onPressed: () => _showDocumentVersions(document),
                       icon: const Icon(Icons.history, size: 18),
-                      label: const Padding(
-                        padding: EdgeInsets.only(right: 6),
-                        child: Text('Versions', style: TextStyle(fontSize: 12)),
+                      label: const Text(
+                        'Versions',
+                        style: TextStyle(fontSize: 12),
                       ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.blue,
@@ -652,26 +649,33 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
 
                   const SizedBox(width: 8),
 
-                  // DISABLED DOWNLOAD BUTTON (with popup)
+                  // DISABLED DOWNLOAD BUTTON (with popup) - FIXED SIZE
                   Expanded(
-                    child: ElevatedButton.icon(
+                    child: OutlinedButton.icon(
                       onPressed: () => _showDownloadRestrictedPopup(context),
                       icon: Icon(
                         Icons.download,
                         size: 18,
-                        color: Colors.grey.shade300,
+                        color: Colors.grey.shade500,
                       ),
                       label: Text(
                         'Download',
-                        style: TextStyle(color: Colors.grey.shade300),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey.shade200,
-                        foregroundColor: Colors.grey.shade300,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
                         ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey.shade500,
+                        side: BorderSide(
+                          color: Colors.grey.shade400,
+                          width: 1.5,
+                        ),
+                        backgroundColor: Colors.grey.shade100,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        // Disabled state styling
+                        disabledForegroundColor: Colors.grey.shade500,
+                        disabledBackgroundColor: Colors.grey.shade100,
                       ),
                     ),
                   ),
@@ -702,18 +706,19 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.lock_outline, size: 48, color: Colors.orange),
-        title: const Text('Download Restricted'),
+        icon: const Icon(Icons.download_outlined, size: 48, color: Colors.blue),
+        title: const Text('Download Document'),
         content: const Text(
-          'Download access is restricted for this shared document. '
-          'Please contact the document owner or system administrator '
-          'to request download permissions.',
+          'For security purposes, library documents require approval for downloading. '
+          'Please reach out to your team administrator or the document owner '
+          'to request download permissions.\n\n'
+          'In the meantime, you can preview the document using the "View" option.',
           textAlign: TextAlign.center,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: const Text('Understand'),
           ),
         ],
       ),
