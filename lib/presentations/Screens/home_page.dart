@@ -674,88 +674,166 @@ class _HomePageState extends State<HomePage>
       if (result['success'] == true) {
         final versions = result['versions'] as List;
 
+        // Add state for selected version
+        Map<String, dynamic>? selectedVersion;
+
         // ignore: use_build_context_synchronously
         showDialog(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Document Versions'),
-            content: Container(
-              width: double.maxFinite,
-              constraints: const BoxConstraints(maxHeight: 400),
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: versions.length,
-                itemBuilder: (context, index) {
-                  final version = versions[index];
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: Icon(
-                        version['is_current'] == true
-                            ? Icons.check_circle
-                            : Icons.history,
-                        color: version['is_current'] == true
-                            ? Colors.green
-                            : Colors.grey,
-                      ),
-                      title: Text('Version ${version['version_number']}'),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Uploaded: ${_formatDate(version['upload_date'])}',
+          builder: (context) => StatefulBuilder(
+            builder: (context, setState) {
+              return AlertDialog(
+                title: const Text('Document Versions'),
+                content: Container(
+                  width: double.maxFinite,
+                  constraints: const BoxConstraints(maxHeight: 400),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: versions.length,
+                    itemBuilder: (context, index) {
+                      final version = versions[index];
+                      final isSelected =
+                          selectedVersion?['version_number'] ==
+                          version['version_number'];
+                      final isCurrent = version['is_current'] == true;
+
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            selectedVersion = version;
+                          });
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.blue.shade50
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isSelected
+                                  ? Colors.blue
+                                  : Colors.grey.shade300,
+                              width: isSelected ? 2 : 1,
+                            ),
                           ),
-                          if (version['uploaded_by'] != null)
-                            Text('By: ${version['uploaded_by']}'),
-                        ],
-                      ),
-                      trailing: version['is_current'] == true
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: Colors.green.shade100,
+                          child: ListTile(
+                            leading: Icon(
+                              isCurrent ? Icons.check_circle : Icons.history,
+                              color: isCurrent ? Colors.green : Colors.grey,
+                            ),
+                            title: Text('Version ${version['version_number']}'),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Uploaded: ${_formatDate(version['upload_date'])}',
                                 ),
-                              ),
-                              child: Text(
-                                'Current',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.green.shade700,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            )
-                          : null,
-                    ),
-                  );
-                },
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-            ],
+                                if (version['uploaded_by'] != null)
+                                  Text('By: ${version['uploaded_by']}'),
+                              ],
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isCurrent)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.green.shade100,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Current',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.green.shade700,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                if (isSelected)
+                                  const Icon(Icons.check, color: Colors.blue),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: selectedVersion != null
+                        ? () async {
+                            Navigator.pop(context); // Close dialog
+                            await _openSelectedVersion(
+                              context,
+                              document,
+                              selectedVersion!,
+                            );
+                          }
+                        : null,
+                    icon: const Icon(Icons.visibility, size: 18),
+                    label: const Text('View Selected Version'),
+                  ),
+                ],
+              );
+            },
           ),
         );
       } else {
         throw Exception(result['error']);
       }
     } catch (e) {
-      // ignore: use_build_context_synchronously
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to load versions: $e'),
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _openSelectedVersion(
+    BuildContext context,
+    Document document,
+    Map<String, dynamic> version,
+  ) async {
+    setState(() {
+      _isDownloading = true;
+    });
+
+    try {
+      final documentOpener = DocumentOpenerService();
+
+      await documentOpener.openDocumentVersion(
+        context: context,
+        documentId: document.id,
+        versionNumber: version['version_number'].toString(),
+        originalFileName: document.name,
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to open version: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isDownloading = false;
+      });
     }
   }
 

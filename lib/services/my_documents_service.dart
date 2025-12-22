@@ -1,5 +1,6 @@
 // services/my_documents_service.dart
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:digi_sanchika/services/api_service.dart';
@@ -164,6 +165,63 @@ class MyDocumentsService {
     }
   }
 
+  // ============ DOWNLOAD DOCUMENT VERSION ============
+  static Future<Map<String, dynamic>> downloadDocumentVersion({
+    required String documentId,
+    required String versionNumber,
+  }) async {
+    try {
+      final headers = await _createAuthHeaders();
+      final url =
+          '${ApiService.currentBaseUrl}/documents/$documentId/versions/$versionNumber/download';
+
+      final response = await http.get(Uri.parse(url), headers: headers);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'data': response.bodyBytes, // The actual file bytes
+          'contentType': response.headers['content-type'],
+          'filename': _extractFilenameFromHeaders(response.headers),
+        };
+      } else {
+        // Try to parse error message
+        String errorMessage =
+            'Failed to download version. Status: ${response.statusCode}';
+        try {
+          final errorData = json.decode(response.body);
+          if (errorData.containsKey('detail')) {
+            errorMessage = errorData['detail'];
+          }
+        } catch (_) {
+          // If JSON parsing fails, use default message
+        }
+
+        return {
+          'success': false,
+          'error': errorMessage,
+          'statusCode': response.statusCode,
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Network error: $e'};
+    }
+  }
+
+  // Helper to extract filename from Content-Disposition header
+  static String? _extractFilenameFromHeaders(Map<String, String> headers) {
+    final contentDisposition = headers['content-disposition'];
+    if (contentDisposition != null) {
+      final match = RegExp(
+        r'filename="([^"]+)"',
+      ).firstMatch(contentDisposition);
+      if (match != null) {
+        return match.group(1);
+      }
+    }
+    return null;
+  }
+
   // ============ DOWNLOAD DOCUMENT ============
   static Future<Map<String, dynamic>> downloadDocument(
     String documentId,
@@ -178,14 +236,21 @@ class MyDocumentsService {
       );
 
       if (response.statusCode == 200) {
+        String? filename;
+        final contentDisposition = response.headers['content-disposition'];
+        if (contentDisposition != null) {
+          final match = RegExp(
+            r'filename="([^"]+)"',
+          ).firstMatch(contentDisposition);
+          if (match != null) {
+            filename = match.group(1);
+          }
+        }
+
         return {
           'success': true,
           'data': response.bodyBytes,
-          'filename':
-              response.headers['content-disposition']
-                  ?.split('filename=')[1]
-                  .replaceAll('"', '') ??
-              'document',
+          'filename': filename ?? 'document',
         };
       } else if (response.statusCode == 401) {
         return {
@@ -343,7 +408,7 @@ class MyDocumentsService {
       final response = await http.post(
         Uri.parse('${ApiService.currentBaseUrl}/share-document'),
         headers: headers,
-        body: {'document_id': documentId, 'user_ids': json.encode(userIds)},
+        body: json.encode({'document_id': documentId, 'user_ids': userIds}),
       );
 
       if (response.statusCode == 200) {
@@ -375,7 +440,7 @@ class MyDocumentsService {
       final response = await http.post(
         Uri.parse('${ApiService.currentBaseUrl}/share-folder'),
         headers: headers,
-        body: {'folder_id': folderId, 'user_ids': json.encode(userIds)},
+        body: json.encode({'folder_id': folderId, 'user_ids': userIds}),
       );
 
       if (response.statusCode == 200) {
@@ -400,7 +465,7 @@ class MyDocumentsService {
   // ============ HELPER METHODS ============
   static Future<Map<String, String>> _createAuthHeaders() async {
     final headers = <String, String>{
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
 
@@ -410,7 +475,9 @@ class MyDocumentsService {
         headers['Cookie'] = 'session_id=$cookie';
       }
     } catch (e) {
-      if (kDebugMode) print('⚠ Could not get session cookie: $e');
+      if (kDebugMode) {
+        print('⚠ Could not get session cookie: $e');
+      }
     }
 
     return headers;
@@ -446,7 +513,9 @@ class MyDocumentsService {
           ),
         );
       } catch (e) {
-        if (kDebugMode) print('❌ Error mapping document: $e');
+        if (kDebugMode) {
+          print('❌ Error mapping document: $e');
+        }
       }
     }
 
@@ -475,7 +544,9 @@ class MyDocumentsService {
           ),
         );
       } catch (e) {
-        if (kDebugMode) print('❌ Error mapping folder: $e');
+        if (kDebugMode) {
+          print('❌ Error mapping folder: $e');
+        }
       }
     }
 
@@ -484,7 +555,12 @@ class MyDocumentsService {
 
   static String _extractFileType(String filename) {
     if (filename.isEmpty) return 'unknown';
-    final extension = filename.split('.').last.toLowerCase();
+
+    // Get the extension
+    final parts = filename.split('.');
+    if (parts.length < 2) return 'unknown';
+
+    final extension = parts.last.toLowerCase();
 
     final typeMap = {
       'pdf': 'PDF',
@@ -526,8 +602,11 @@ class MyDocumentsService {
         } else {
           return '$sizeInBytes B';
         }
-        // ignore: empty_catches
-      } catch (e) {}
+      } catch (e) {
+        if (kDebugMode) {
+          print('Error parsing file size: $e');
+        }
+      }
     }
     return 'Unknown Size';
   }
