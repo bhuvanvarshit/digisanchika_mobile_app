@@ -23,6 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:digi_sanchika/presentations/Screens/profile_screen.dart';
 import 'package:digi_sanchika/services/document_opener_service.dart';
+import 'package:digi_sanchika/presentations/screens/folder_manager_screen.dart';
 
 // Add this enum for layout modes
 enum ViewMode { list, grid2x2, grid3x3, compact, detailed }
@@ -1835,11 +1836,20 @@ class _HomePageState extends State<HomePage>
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
+              // Manage Folders button
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: _showCreateFolderDialog,
-                  icon: const Icon(Icons.create_new_folder, size: 20),
-                  label: const Text('New Folder'),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            FolderManagerScreen(userName: widget.userName),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.folder_open, size: 20),
+                  label: const Text('Manage Folders'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.indigo,
                     foregroundColor: Colors.white,
@@ -1851,6 +1861,8 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
               const SizedBox(width: 12),
+
+              // Recent button
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => setState(() => _showRecent = !_showRecent),
@@ -1868,6 +1880,7 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
               const SizedBox(width: 12),
+
               // Layout selector button
               Container(width: 40, child: _buildLayoutSelector()),
             ],
