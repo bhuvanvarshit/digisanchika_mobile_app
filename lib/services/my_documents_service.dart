@@ -405,14 +405,42 @@ class MyDocumentsService {
   }) async {
     try {
       final headers = await _createAuthHeaders();
+      // Keep as form-urlencoded since backend expects Form data
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+
+      // FIX: Send as form data, not JSON
+      final body = {
+        'document_id': documentId,
+        'user_ids': json.encode(userIds), // Encode array as JSON string
+      };
+
+      if (kDebugMode) {
+        print('📤 Sharing document $documentId with users: $userIds');
+        print('📦 Body: $body');
+      }
+
       final response = await http.post(
         Uri.parse('${ApiService.currentBaseUrl}/share-document'),
         headers: headers,
-        body: json.encode({'document_id': documentId, 'user_ids': userIds}),
+        body: body, // Send as form data
       );
 
+      if (kDebugMode) {
+        print('📡 Response status: ${response.statusCode}');
+        print('📦 Response body: ${response.body}');
+      }
+
       if (response.statusCode == 200) {
-        return {'success': true, 'message': 'Document shared successfully'};
+        try {
+          final responseData = json.decode(response.body);
+          return {
+            'success': true,
+            'message':
+                responseData['message'] ?? 'Document shared successfully',
+          };
+        } catch (e) {
+          return {'success': true, 'message': 'Document shared successfully'};
+        }
       } else if (response.statusCode == 401) {
         return {
           'success': false,
@@ -420,16 +448,22 @@ class MyDocumentsService {
           'requiresLogin': true,
         };
       } else {
-        return {
-          'success': false,
-          'error': 'Share failed (${response.statusCode})',
-        };
+        // Try to parse error message
+        String errorMsg = 'Share failed (${response.statusCode})';
+        try {
+          final errorData = json.decode(response.body);
+          errorMsg = errorData['detail'] ?? errorMsg;
+        } catch (_) {}
+
+        return {'success': false, 'error': errorMsg};
       }
     } catch (e) {
+      if (kDebugMode) print('❌ Share document error: $e');
       return {'success': false, 'error': 'Exception: $e'};
     }
   }
 
+  // ============ SHARE FOLDER ============
   // ============ SHARE FOLDER ============
   static Future<Map<String, dynamic>> shareFolder({
     required String folderId,
@@ -437,14 +471,41 @@ class MyDocumentsService {
   }) async {
     try {
       final headers = await _createAuthHeaders();
+      // Keep as form-urlencoded
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+
+      // Send as form data
+      final body = {
+        'folder_id': folderId,
+        'user_ids': json.encode(userIds), // Encode array as JSON string
+      };
+
+      if (kDebugMode) {
+        print('📤 Sharing folder $folderId with users: $userIds');
+        print('📦 Body: $body');
+      }
+
       final response = await http.post(
         Uri.parse('${ApiService.currentBaseUrl}/share-folder'),
         headers: headers,
-        body: json.encode({'folder_id': folderId, 'user_ids': userIds}),
+        body: body, // Send as form data
       );
 
+      if (kDebugMode) {
+        print('📡 Response status: ${response.statusCode}');
+        print('📦 Response body: ${response.body}');
+      }
+
       if (response.statusCode == 200) {
-        return {'success': true, 'message': 'Folder shared successfully'};
+        try {
+          final responseData = json.decode(response.body);
+          return {
+            'success': true,
+            'message': responseData['message'] ?? 'Folder shared successfully',
+          };
+        } catch (e) {
+          return {'success': true, 'message': 'Folder shared successfully'};
+        }
       } else if (response.statusCode == 401) {
         return {
           'success': false,
@@ -452,12 +513,16 @@ class MyDocumentsService {
           'requiresLogin': true,
         };
       } else {
-        return {
-          'success': false,
-          'error': 'Share failed (${response.statusCode})',
-        };
+        String errorMsg = 'Share failed (${response.statusCode})';
+        try {
+          final errorData = json.decode(response.body);
+          errorMsg = errorData['detail'] ?? errorMsg;
+        } catch (_) {}
+
+        return {'success': false, 'error': errorMsg};
       }
     } catch (e) {
+      if (kDebugMode) print('❌ Share folder error: $e');
       return {'success': false, 'error': 'Exception: $e'};
     }
   }

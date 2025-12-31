@@ -19,6 +19,9 @@ import 'package:digi_sanchika/presentations/Screens/shared_folder_screen.dart';
 import 'package:digi_sanchika/services/my_documents_service.dart';
 import 'package:digi_sanchika/services/shared_folders_service.dart';
 
+// Add enum for layout modes
+enum SharedViewMode { list, grid2x2, grid3x3, compact, detailed }
+
 class SharedMeScreen extends StatefulWidget {
   const SharedMeScreen({super.key});
 
@@ -43,6 +46,18 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   bool _hasError = false;
   bool _isDownloading = false;
   String _errorMessage = '';
+
+  // NEW: Layout mode and file type filter variables
+  SharedViewMode _currentViewMode = SharedViewMode.list;
+  bool _showFileTypeFilter = false;
+  String _selectedFileType = 'All';
+  List<String> _availableFileTypes = [
+    'All',
+  ]; // Will be populated from documents
+
+  // NEW: Collapsible states for document cards
+  Map<String, bool> _expandedStates = {};
+
   // Stats
   int _totalDocuments = 0;
   int _totalFolders = 0;
@@ -99,12 +114,20 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
 
       if (!mounted) return;
 
+      // Extract unique file types from documents
+      final fileTypes = documents
+          .map((doc) => doc.type.toUpperCase())
+          .toSet()
+          .toList();
+      fileTypes.sort();
+
       setState(() {
         _sharedDocuments = documents;
         _filteredDocuments = documents;
         _sharedFolders = folders;
         _totalDocuments = documents.length;
         _totalFolders = folders.length;
+        _availableFileTypes = ['All', ...fileTypes];
         _isLoading = false;
       });
 
@@ -125,12 +148,20 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     try {
       final localDocs = await LocalStorageService.loadSharedDocuments();
 
+      // Extract file types from local docs too
+      final fileTypes = localDocs
+          .map((doc) => doc.type.toUpperCase())
+          .toSet()
+          .toList();
+      fileTypes.sort();
+
       if (mounted) {
         setState(() {
           _sharedDocuments = localDocs;
           _filteredDocuments = localDocs;
           _totalDocuments = localDocs.length;
           _totalFolders = 0;
+          _availableFileTypes = ['All', ...fileTypes];
           _hasError = true;
           _errorMessage = 'Using cached data. No internet connection.';
           _isLoading = false;
@@ -162,31 +193,35 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     }
   }
 
-  /// Filter documents based on search query
-  /// Filter documents based on search query
-  void _filterDocuments(String query) {
-    if (query.isEmpty) {
-      setState(() {
-        _filteredDocuments = _sharedDocuments;
-      });
-      return;
-    }
+  /// Filter documents based on search query and file type
+  void _filterDocuments({String? searchQuery, String? fileType}) {
+    final query = searchQuery ?? _searchController.text;
+    final type = fileType ?? _selectedFileType;
 
-    final lowercaseQuery = query.toLowerCase();
     setState(() {
       _filteredDocuments = _sharedDocuments.where((doc) {
-        return doc.name.toLowerCase().contains(lowercaseQuery) ||
-            (doc.owner.isNotEmpty &&
-                doc.owner.toLowerCase().contains(lowercaseQuery)) ||
-            (doc.keyword.isNotEmpty &&
-                doc.keyword.toLowerCase().contains(lowercaseQuery)) ||
-            doc.type.toLowerCase().contains(lowercaseQuery) ||
-            (doc.classification.isNotEmpty &&
-                doc.classification.toLowerCase().contains(lowercaseQuery)) ||
-            (doc.details.isNotEmpty &&
-                doc.details.toLowerCase().contains(lowercaseQuery)) ||
-            (doc.folder.isNotEmpty &&
-                doc.folder.toLowerCase().contains(lowercaseQuery));
+        // Apply file type filter
+        final fileTypeMatch = type == 'All' || doc.type.toUpperCase() == type;
+
+        // Apply search filter if query exists
+        if (query.isEmpty) return fileTypeMatch;
+
+        final lowercaseQuery = query.toLowerCase();
+        return fileTypeMatch &&
+            (doc.name.toLowerCase().contains(lowercaseQuery) ||
+                (doc.owner.isNotEmpty &&
+                    doc.owner.toLowerCase().contains(lowercaseQuery)) ||
+                (doc.keyword.isNotEmpty &&
+                    doc.keyword.toLowerCase().contains(lowercaseQuery)) ||
+                doc.type.toLowerCase().contains(lowercaseQuery) ||
+                (doc.classification.isNotEmpty &&
+                    doc.classification.toLowerCase().contains(
+                      lowercaseQuery,
+                    )) ||
+                (doc.details.isNotEmpty &&
+                    doc.details.toLowerCase().contains(lowercaseQuery)) ||
+                (doc.folder.isNotEmpty &&
+                    doc.folder.toLowerCase().contains(lowercaseQuery)));
       }).toList();
     });
   }
@@ -194,7 +229,64 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   /// Clear search and reset filter
   void _clearSearch() {
     _searchController.clear();
-    _filterDocuments('');
+    _selectedFileType = 'All';
+    _filterDocuments(searchQuery: '', fileType: 'All');
+  }
+
+  /// Get file icon based on type
+  IconData _getFileIcon(String type) {
+    switch (type.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'docx':
+      case 'doc':
+        return Icons.description;
+      case 'xlsx':
+      case 'xls':
+        return Icons.table_chart;
+      case 'pptx':
+      case 'ppt':
+        return Icons.slideshow;
+      case 'image':
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      case 'txt':
+        return Icons.text_fields;
+      case 'csv':
+        return Icons.table_chart;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  /// Get file color based on type
+  Color _getFileColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'pdf':
+        return Colors.red;
+      case 'docx':
+      case 'doc':
+        return Colors.blue;
+      case 'xlsx':
+      case 'xls':
+        return Colors.green;
+      case 'pptx':
+      case 'ppt':
+        return Colors.orange;
+      case 'image':
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Colors.purple;
+      case 'txt':
+        return Colors.grey;
+      case 'csv':
+        return Colors.green.shade700;
+      default:
+        return Colors.indigo;
+    }
   }
 
   // ============ DOWNLOAD HELPER METHODS ============
@@ -421,7 +513,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
         builder: (context) => AlertDialog(
           title: Row(
             children: [
-              _getFileIcon('py', 24),
+              Icon(_getFileIcon('py'), size: 24, color: _getFileColor('py')),
               const SizedBox(width: 12),
               Expanded(child: Text(filename, overflow: TextOverflow.ellipsis)),
             ],
@@ -512,12 +604,15 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
       final data = result['data'] as Map<String, dynamic>;
 
       showDialog(
-        // ignore: use_build_context_synchronously
         context: context,
         builder: (context) => AlertDialog(
           title: Row(
             children: [
-              _getFileIcon(document.type, 24),
+              Icon(
+                _getFileIcon(document.type),
+                size: 24,
+                color: _getFileColor(document.type),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(document.name, overflow: TextOverflow.ellipsis),
@@ -583,22 +678,22 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
               onPressed: () => Navigator.pop(context),
               child: const Text('Close'),
             ),
-            if (document.allowDownload)
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _downloadDocument(document);
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.download, size: 18),
-                    SizedBox(width: 6),
-                    Text('Download'),
-                  ],
-                ),
-              ),
+            // if (document.allowDownload)
+            //   ElevatedButton(
+            //     onPressed: () {
+            //       Navigator.pop(context);
+            //       _downloadDocument(document);
+            //     },
+            //     style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            //     child: const Row(
+            //       mainAxisSize: MainAxisSize.min,
+            //       children: [
+            //         Icon(Icons.download, size: 18),
+            //         SizedBox(width: 6),
+            //         Text('Download'),
+            //       ],
+            //     ),
+            //   ),
             ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
@@ -701,7 +796,6 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
   }
 
   // Format date to DD-MM-YYYY (Same as Document Library)
-  // Format date to DD-MM-YYYY (handles both YYYY-MM-DD and DD/MM/YYYY formats)
   String _formatDateDDMMYYYY(dynamic date) {
     try {
       if (date == null || date.toString().isEmpty) {
@@ -783,7 +877,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     );
   }
 
-  // NEW Helper method to build detail row WITH icons (for the new design)
+  // Helper method to build detail row WITH icons (for the new design)
   Widget _buildDetailRowWithIcon(
     String label,
     String value,
@@ -906,37 +1000,18 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     );
   }
 
-  // Build document item card with improved metadata layout (Same as Document Library)
-  Widget _buildDocumentCard(Document document, int index) {
-    final docIcons = {
-      'PDF': Icons.picture_as_pdf,
-      'DOCX': Icons.description,
-      'XLSX': Icons.table_chart,
-      'PPTX': Icons.slideshow,
-      'TXT': Icons.text_snippet,
-      'XLS': Icons.table_chart,
-      'PPT': Icons.slideshow,
-      'DOC': Icons.description,
-      'IMAGE': Icons.image,
-    };
-    final docColors = {
-      'PDF': Colors.red,
-      'DOCX': Colors.blue,
-      'XLSX': Colors.green,
-      'PPTX': Colors.orange,
-      'TXT': Colors.grey,
-      'PPT': Colors.orange,
-      'XLS': Colors.green,
-      'DOC': Colors.blue,
-      'IMAGE': Colors.purple,
-    };
+  // ============ FEATURE 1: COLLAPSIBLE DOCUMENT CARDS ============
 
-    String fileType = document.type.toUpperCase();
-    IconData icon = docIcons[fileType] ?? Icons.insert_drive_file;
-    Color color = docColors[fileType] ?? Colors.indigo;
+  // Build document item card with COLLAPSIBLE functionality
+  Widget _buildDocumentCard(Document document, int index) {
+    final iconData = _getFileIcon(document.type);
+    final color = _getFileColor(document.type);
 
     // Format the date to DD MM YYYY
     String formattedDate = _formatDateDDMMYYYY(document.uploadDate);
+
+    // Check if this specific document is expanded
+    bool isExpanded = _expandedStates[document.id] ?? false;
 
     return InkWell(
       onTap: () => _handleDocumentDoubleTap(document),
@@ -950,7 +1025,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top row with icon, document info
+              // Top row with icon, document info, and expand/collapse button
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -960,21 +1035,123 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                       color: color.withAlpha(10),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(icon, color: color, size: 32),
+                    child: Icon(iconData, color: color, size: 32),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          document.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                document.name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: isExpanded ? 2 : 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            // COLLAPSIBLE EXPAND/COLLAPSE BUTTON
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  // Toggle only this specific document using its ID
+                                  _expandedStates[document.id] = !isExpanded;
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: isExpanded
+                                      ? color.withAlpha(20)
+                                      : Colors.grey.shade100,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isExpanded
+                                        ? color.withAlpha(100)
+                                        : Colors.transparent,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: AnimatedRotation(
+                                    duration: const Duration(milliseconds: 300),
+                                    turns: isExpanded ? 0.5 : 0,
+                                    child: Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      size: 22,
+                                      color: isExpanded
+                                          ? color
+                                          : Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            // Vertical More Options Button
+                            PopupMenuButton<String>(
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'details',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline,
+                                        size: 20,
+                                        color: Colors.blue,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text('Details'),
+                                    ],
+                                  ),
+                                ),
+                                // if (document.allowDownload)
+                                //   PopupMenuItem(
+                                //     value: 'download',
+                                //     child: Row(
+                                //       children: [
+                                //         Icon(
+                                //           Icons.download,
+                                //           size: 20,
+                                //           color: Colors.green,
+                                //         ),
+                                //         SizedBox(width: 8),
+                                //         Text('Download'),
+                                //       ],
+                                //     ),
+                                //   ),
+                              ],
+                              onSelected: (value) {
+                                if (value == 'details') {
+                                  _showDocumentDetails(document);
+                                } else if (value == 'download') {
+                                  _downloadDocument(document);
+                                }
+                              },
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Icon(
+                                    Icons.more_vert,
+                                    size: 20,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -989,95 +1166,796 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              const Divider(height: 1),
-              const SizedBox(height: 12),
 
-              // Metadata details section - Using NEW helper method with icons
-              if (document.keyword.isNotEmpty)
-                _buildDetailRowWithIcon(
-                  'Keyword',
-                  document.keyword,
-                  Icons.label,
+              // COLLAPSIBLE CONTENT SECTION
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                child: SizedBox(
+                  height: isExpanded ? null : 0,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 16),
+                      const Divider(height: 1),
+                      const SizedBox(height: 12),
+                      // Metadata details section
+                      if (document.keyword.isNotEmpty)
+                        _buildDetailRowWithIcon(
+                          'Keyword',
+                          document.keyword,
+                          Icons.label,
+                        ),
+                      _buildDetailRowWithIcon(
+                        'Owner',
+                        document.owner,
+                        Icons.person,
+                      ),
+                      _buildDetailRowWithIcon(
+                        'Folder',
+                        document.folder,
+                        Icons.folder,
+                      ),
+                      _buildDetailRowWithIcon(
+                        'Classification',
+                        document.classification,
+                        Icons.security,
+                      ),
+                      if (document.details.isNotEmpty)
+                        _buildDetailRowWithIcon(
+                          'Details',
+                          document.details,
+                          Icons.info_outline,
+                        ),
+                      const SizedBox(height: 16),
+
+                      // ACTION BUTTONS ROW
+                      Row(
+                        children: [
+                          // VIEW BUTTON
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () =>
+                                  _handleDocumentDoubleTap(document),
+                              icon: const Icon(Icons.visibility, size: 18),
+                              label: const Text('View'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.purple,
+                                side: const BorderSide(color: Colors.purple),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(width: 8),
+
+                          // VERSIONS BUTTON
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showDocumentVersions(document),
+                              icon: const Icon(Icons.history, size: 18),
+                              label: const Text('Versions'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.blue,
+                                side: const BorderSide(color: Colors.blue),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(width: 8),
+
+                          // DOWNLOAD BUTTON (conditionally enabled)
+                          // Expanded(
+                          //   child: document.allowDownload
+                          //       ? OutlinedButton.icon(
+                          //           onPressed: () =>
+                          //               _downloadDocument(document),
+                          //           icon: const Icon(Icons.download, size: 18),
+                          //           label: const Text('Download'),
+                          //           style: OutlinedButton.styleFrom(
+                          //             foregroundColor: Colors.green,
+                          //             side: const BorderSide(
+                          //               color: Colors.green,
+                          //             ),
+                          //             padding: const EdgeInsets.symmetric(
+                          //               vertical: 10,
+                          //             ),
+                          //           ),
+                          //         )
+                          //       : ElevatedButton.icon(
+                          //           onPressed: () =>
+                          //               _showDownloadRestrictedPopup(context),
+                          //           icon: Icon(
+                          //             Icons.download,
+                          //             size: 18,
+                          //             color: Colors.grey.shade300,
+                          //           ),
+                          //           label: Text(
+                          //             'Download',
+                          //             style: TextStyle(
+                          //               color: Colors.grey.shade300,
+                          //             ),
+                          //           ),
+                          //           style: ElevatedButton.styleFrom(
+                          //             backgroundColor: Colors.grey.shade200,
+                          //             foregroundColor: Colors.grey.shade300,
+                          //             padding: const EdgeInsets.symmetric(
+                          //               vertical: 10,
+                          //             ),
+                          //             shape: RoundedRectangleBorder(
+                          //               borderRadius: BorderRadius.circular(8),
+                          //             ),
+                          //           ),
+                          //         ),
+                          // ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              _buildDetailRowWithIcon('Owner', document.owner, Icons.person),
-              _buildDetailRowWithIcon('Folder', document.folder, Icons.folder),
-              _buildDetailRowWithIcon(
-                'Classification',
-                document.classification,
-                Icons.security,
               ),
-              if (document.details.isNotEmpty)
-                _buildDetailRowWithIcon(
-                  'Details',
-                  document.details,
-                  Icons.info_outline,
-                ),
-              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-              // ACTION BUTTONS ROW - View, Versions, and Download (disabled)
+  // ============ FEATURE 2: LAYOUT MODES ============
+
+  /// Method to build layout selector
+  Widget _buildLayoutSelector() {
+    return PopupMenuButton<SharedViewMode>(
+      tooltip: 'Change Layout',
+      icon: Icon(
+        _getViewModeIcon(_currentViewMode),
+        color: Colors.indigo,
+        size: 24,
+      ),
+      onSelected: (SharedViewMode mode) {
+        setState(() {
+          _currentViewMode = mode;
+        });
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<SharedViewMode>>[
+        PopupMenuItem<SharedViewMode>(
+          value: SharedViewMode.list,
+          child: Row(
+            children: [
+              Icon(Icons.list, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('List View'),
+              if (_currentViewMode == SharedViewMode.list)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem<SharedViewMode>(
+          value: SharedViewMode.grid2x2,
+          child: Row(
+            children: [
+              Icon(Icons.grid_on, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Grid (2x2)'),
+              if (_currentViewMode == SharedViewMode.grid2x2)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem<SharedViewMode>(
+          value: SharedViewMode.grid3x3,
+          child: Row(
+            children: [
+              Icon(Icons.view_module, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Grid (3x3)'),
+              if (_currentViewMode == SharedViewMode.grid3x3)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem<SharedViewMode>(
+          value: SharedViewMode.compact,
+          child: Row(
+            children: [
+              Icon(Icons.view_headline, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Compact View'),
+              if (_currentViewMode == SharedViewMode.compact)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem<SharedViewMode>(
+          value: SharedViewMode.detailed,
+          child: Row(
+            children: [
+              Icon(Icons.table_rows, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Detailed View'),
+              if (_currentViewMode == SharedViewMode.detailed)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _getViewModeIcon(SharedViewMode mode) {
+    switch (mode) {
+      case SharedViewMode.list:
+        return Icons.list;
+      case SharedViewMode.grid2x2:
+        return Icons.grid_on;
+      case SharedViewMode.grid3x3:
+        return Icons.view_module;
+      case SharedViewMode.compact:
+        return Icons.view_headline;
+      case SharedViewMode.detailed:
+        return Icons.table_rows;
+    }
+  }
+
+  /// Method to build documents content based on view mode
+  Widget _buildDocumentsContent(List<Document> documents) {
+    switch (_currentViewMode) {
+      case SharedViewMode.list:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: documents.length,
+          itemBuilder: (context, index) {
+            return _buildDocumentCard(documents[index], index);
+          },
+        );
+      case SharedViewMode.grid2x2:
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 0.9,
+          ),
+          itemCount: documents.length,
+          itemBuilder: (context, index) {
+            return _buildDocumentGridItem(documents[index], index, 2);
+          },
+        );
+      case SharedViewMode.grid3x3:
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 0.85,
+          ),
+          itemCount: documents.length,
+          itemBuilder: (context, index) {
+            return _buildDocumentGridItem(documents[index], index, 3);
+          },
+        );
+      case SharedViewMode.compact:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: documents.length,
+          itemBuilder: (context, index) {
+            return _buildDocumentCompactItem(documents[index], index);
+          },
+        );
+      case SharedViewMode.detailed:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: documents.length,
+          itemBuilder: (context, index) {
+            return _buildDocumentDetailedItem(documents[index], index);
+          },
+        );
+    }
+  }
+
+  // Grid view item
+  Widget _buildDocumentGridItem(Document document, int index, int columns) {
+    final iconData = _getFileIcon(document.type);
+    final color = _getFileColor(document.type);
+    final documentOpener = DocumentOpenerService();
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => documentOpener.handleDoubleTap(
+          context: context,
+          document: document,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: EdgeInsets.all(columns == 2 ? 12 : 8),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(20),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  iconData,
+                  color: color,
+                  size: columns == 2 ? 26 : 18,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Flexible(
+                child: Text(
+                  document.name,
+                  style: TextStyle(
+                    fontSize: columns == 2 ? 11 : 9,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: columns == 2 ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                document.type,
+                style: TextStyle(
+                  fontSize: columns == 2 ? 9 : 8,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              if (columns == 2) ...[
+                const SizedBox(height: 2),
+                Text(
+                  _formatDateDDMMYYYY(document.uploadDate),
+                  style: TextStyle(fontSize: 8, color: Colors.grey.shade500),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Compact view item
+  Widget _buildDocumentCompactItem(Document document, int index) {
+    final documentOpener = DocumentOpenerService();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        elevation: 0.5,
+        child: InkWell(
+          onTap: () => documentOpener.handleDoubleTap(
+            context: context,
+            document: document,
+          ),
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.grey.shade100, width: 1),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _getFileIcon(document.type),
+                  color: _getFileColor(document.type),
+                  size: 18,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    document.name,
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _formatDateDDMMYYYY(document.uploadDate),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Detailed view item
+  Widget _buildDocumentDetailedItem(Document document, int index) {
+    final iconData = _getFileIcon(document.type);
+    final color = _getFileColor(document.type);
+    final documentOpener = DocumentOpenerService();
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => documentOpener.handleDoubleTap(
+          context: context,
+          document: document,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // VIEW BUTTON - opens the document
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(20),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(iconData, color: color, size: 24),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _handleDocumentDoubleTap(document),
-                      icon: const Icon(Icons.visibility, size: 18),
-                      label: const Text('View'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.purple,
-                        side: const BorderSide(color: Colors.purple),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          document.name,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.person,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    document.owner,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.folder,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    document.folder,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.calendar_today,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _formatDateDDMMYYYY(document.uploadDate),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.security,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  document.classification,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'details',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 18,
+                              color: Colors.blue,
+                            ),
+                            SizedBox(width: 6),
+                            const Text(
+                              'Details',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (document.allowDownload)
+                        PopupMenuItem(
+                          value: 'download',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.download,
+                                size: 18,
+                                color: Colors.green,
+                              ),
+                              SizedBox(width: 6),
+                              const Text(
+                                'Download',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                    onSelected: (value) {
+                      if (value == 'details') {
+                        _showDocumentDetails(document);
+                      } else if (value == 'download') {
+                        _downloadDocument(document);
+                      }
+                    },
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.more_vert,
+                        size: 16,
+                        color: Colors.grey,
                       ),
                     ),
                   ),
-
-                  const SizedBox(width: 8),
-
-                  // VERSIONS BUTTON - shows document versions
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => documentOpener.handleDoubleTap(
+                        context: context,
+                        document: document,
+                      ),
+                      icon: Icon(
+                        Icons.visibility,
+                        size: 14,
+                        color: Colors.purple,
+                      ),
+                      label: Text(
+                        'View',
+                        style: TextStyle(fontSize: 12, color: Colors.purple),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.purple),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _showDocumentVersions(document),
-                      icon: const Icon(Icons.history, size: 18),
-                      label: const Text('Versions'),
+                      icon: Icon(Icons.history, size: 14, color: Colors.blue),
+                      label: Text(
+                        'Versions',
+                        style: TextStyle(fontSize: 12, color: Colors.blue),
+                      ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.blue,
                         side: const BorderSide(color: Colors.blue),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
                       ),
                     ),
                   ),
-
-                  const SizedBox(width: 8),
-
-                  // DISABLED DOWNLOAD BUTTON
-                  // Expanded(
-                  //   child: ElevatedButton.icon(
-                  //     onPressed: () => _showDownloadRestrictedPopup(context),
-                  //     icon: Icon(
-                  //       Icons.download,
-                  //       size: 18,
-                  //       color: Colors.grey.shade300,
-                  //     ),
-                  //     label: Text(
-                  //       'Download',
-                  //       style: TextStyle(color: Colors.grey.shade300),
-                  //     ),
-                  //     style: ElevatedButton.styleFrom(
-                  //       backgroundColor: Colors.grey.shade200,
-                  //       foregroundColor: Colors.grey.shade300,
-                  //       padding: const EdgeInsets.symmetric(vertical: 10),
-                  //       shape: RoundedRectangleBorder(
-                  //         borderRadius: BorderRadius.circular(8),
-                  //       ),
-                  //     ),
-                  //   ),
-                  // ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: document.allowDownload
+                        ? OutlinedButton.icon(
+                            onPressed: () => _downloadDocument(document),
+                            icon: Icon(
+                              Icons.download,
+                              size: 14,
+                              color: Colors.green,
+                            ),
+                            label: Text(
+                              'Download',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.green,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Colors.green),
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                            ),
+                          )
+                        : ElevatedButton.icon(
+                            onPressed: () =>
+                                _showDownloadRestrictedPopup(context),
+                            icon: Icon(
+                              Icons.download,
+                              size: 14,
+                              color: Colors.grey.shade300,
+                            ),
+                            label: Text(
+                              'Download',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey.shade200,
+                              foregroundColor: Colors.grey.shade300,
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                  ),
                 ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ============ FEATURE 3: FILE TYPE FILTER ============
+
+  /// Build file type filter dropdown
+  Widget _buildFileTypeFilter() {
+    return PopupMenuButton<String>(
+      tooltip: 'Filter by File Type',
+      icon: Icon(
+        Icons.filter_alt,
+        color: _selectedFileType != 'All' ? Colors.blue : Colors.indigo,
+        size: 24,
+      ),
+      onSelected: (String type) {
+        setState(() {
+          _selectedFileType = type;
+          _filterDocuments(fileType: type);
+        });
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+        for (String type in _availableFileTypes)
+          PopupMenuItem<String>(
+            value: type,
+            child: Row(
+              children: [
+                if (type == 'All')
+                  Icon(Icons.all_inclusive, color: Colors.grey)
+                else
+                  Icon(_getFileIcon(type), color: _getFileColor(type)),
+                SizedBox(width: 8),
+                Text(type),
+                if (_selectedFileType == type)
+                  Icon(Icons.check, color: Colors.green, size: 16),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Show file type filter badge
+  Widget _buildFileTypeBadge() {
+    if (_selectedFileType == 'All') return SizedBox.shrink();
+
+    return Container(
+      margin: EdgeInsets.only(left: 8),
+      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.shade200, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _getFileIcon(_selectedFileType),
+            size: 14,
+            color: _getFileColor(_selectedFileType),
+          ),
+          SizedBox(width: 6),
+          Text(
+            _selectedFileType,
+            style: TextStyle(fontSize: 12, color: Colors.blue.shade800),
+          ),
+          SizedBox(width: 4),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _selectedFileType = 'All';
+                _filterDocuments(fileType: 'All');
+              });
+            },
+            child: Icon(Icons.close, size: 14, color: Colors.blue.shade800),
+          ),
+        ],
       ),
     );
   }
@@ -1105,66 +1983,6 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     );
   }
 
-  /// Get file icon based on type
-  Icon _getFileIcon(String type, double size) {
-    switch (type.toLowerCase()) {
-      case 'pdf':
-        return Icon(Icons.picture_as_pdf, color: Colors.red, size: size);
-      case 'docx':
-      case 'doc':
-        return Icon(Icons.description, color: Colors.blue, size: size);
-      case 'xlsx':
-      case 'xls':
-        return Icon(Icons.table_chart, color: Colors.green, size: size);
-      case 'pptx':
-      case 'ppt':
-        return Icon(Icons.slideshow, color: Colors.orange, size: size);
-      case 'image':
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-        return Icon(Icons.image, color: Colors.purple, size: size);
-      case 'txt':
-        return Icon(Icons.text_fields, color: Colors.grey, size: size);
-      case 'csv':
-        return Icon(
-          Icons.table_chart,
-          color: Colors.green.shade700,
-          size: size,
-        );
-      default:
-        return Icon(Icons.insert_drive_file, color: Colors.indigo, size: size);
-    }
-  }
-
-  /// Get file icon and color based on type
-  Map<String, dynamic> _getFileInfo(String type) {
-    switch (type.toLowerCase()) {
-      case 'pdf':
-        return {'icon': Icons.picture_as_pdf, 'color': Colors.red};
-      case 'docx':
-      case 'doc':
-        return {'icon': Icons.description, 'color': Colors.blue};
-      case 'xlsx':
-      case 'xls':
-        return {'icon': Icons.table_chart, 'color': Colors.green};
-      case 'pptx':
-      case 'ppt':
-        return {'icon': Icons.slideshow, 'color': Colors.orange};
-      case 'image':
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-        return {'icon': Icons.image, 'color': Colors.purple};
-      case 'txt':
-        return {'icon': Icons.text_fields, 'color': Colors.grey};
-      case 'csv':
-        return {'icon': Icons.table_chart, 'color': Colors.green.shade700};
-      default:
-        return {'icon': Icons.insert_drive_file, 'color': Colors.indigo};
-    }
-  }
-
   /// Format file size
   String _formatFileSize(String size) {
     try {
@@ -1183,7 +2001,6 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
     }
   }
 
-  /// Build empty state widget
   /// Build empty state widget
   Widget _buildEmptyState() {
     return Center(
@@ -1290,7 +2107,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
             color: Colors.grey.shade50,
             child: Column(
               children: [
-                // Search bar
+                // Search bar with filters
                 Row(
                   children: [
                     Expanded(
@@ -1307,7 +2124,8 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                         ),
                         child: TextField(
                           controller: _searchController,
-                          onChanged: _filterDocuments,
+                          onChanged: (value) =>
+                              _filterDocuments(searchQuery: value),
                           maxLines: 1,
                           decoration: InputDecoration(
                             hintText: 'Search documents, owners, keywords...',
@@ -1337,6 +2155,12 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 10),
+                    // File Type Filter
+                    // _buildFileTypeFilter(),
+                    // const SizedBox(width: 8),
+                    // Layout Selector
+                    _buildLayoutSelector(),
                     const SizedBox(width: 12),
                     // Folders button - Only show if needed
                     if (_sharedFolders.isNotEmpty)
@@ -1375,7 +2199,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                // Stats row
+                // Stats row with filter badge
                 Row(
                   children: [
                     Text(
@@ -1385,6 +2209,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
                         fontSize: 13,
                       ),
                     ),
+                    _buildFileTypeBadge(),
                     const Spacer(),
                     if (_sharedFolders.isNotEmpty)
                       Text(
@@ -1430,13 +2255,7 @@ class _SharedMeScreenState extends State<SharedMeScreen> {
               child: RefreshIndicator(
                 onRefresh: _loadSharedData,
                 color: Colors.indigo,
-                child: ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 20),
-                  itemCount: _filteredDocuments.length,
-                  itemBuilder: (context, index) {
-                    return _buildDocumentCard(_filteredDocuments[index], index);
-                  },
-                ),
+                child: _buildDocumentsContent(_filteredDocuments),
               ),
             ),
         ],

@@ -999,7 +999,7 @@ class _UploadDocumentTabState extends State<UploadDocumentTab> {
           const SnackBar(
             content: Text('📱 No internet connection. Saving locally only.'),
             backgroundColor: Colors.blue,
-            duration: const Duration(seconds: 3),
+            duration: Duration(seconds: 3),
           ),
         );
 

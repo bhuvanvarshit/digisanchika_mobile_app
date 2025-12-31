@@ -12,6 +12,9 @@ import 'package:path/path.dart' as path;
 import 'dart:io';
 import 'package:flutter/services.dart';
 
+// Add enum for layout modes
+enum SharedFolderViewMode { list, grid2x2, grid3x3, compact, detailed }
+
 class SharedFolderScreen extends StatefulWidget {
   final String? folderId;
   final String folderName;
@@ -41,6 +44,12 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
   final DocumentOpenerService _documentOpener = DocumentOpenerService();
   final SharedDocumentsService _sharedService = SharedDocumentsService();
 
+  // NEW: Layout mode, file type filter, and collapsible states
+  SharedFolderViewMode _currentViewMode = SharedFolderViewMode.list;
+  String _selectedFileType = 'All';
+  List<String> _availableFileTypes = ['All'];
+  Map<String, bool> _expandedStates = {};
+
   @override
   void initState() {
     super.initState();
@@ -64,10 +73,18 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
       if (!mounted) return;
 
       if (result['success'] == true) {
+        final documents = (result['documents'] as List).cast<Document>();
+        final fileTypes = documents
+            .map((doc) => doc.type.toUpperCase())
+            .toSet()
+            .toList();
+        fileTypes.sort();
+
         setState(() {
-          _documents = (result['documents'] as List).cast<Document>();
+          _documents = documents;
           _subfolders = (result['folders'] as List)
               .cast<Map<String, dynamic>>();
+          _availableFileTypes = ['All', ...fileTypes];
           _isLoading = false;
         });
       } else {
@@ -107,7 +124,32 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     Navigator.pop(context);
   }
 
-  // ============ DOWNLOAD FUNCTIONALITY (Same as SharedMeScreen) ============
+  // ============ FILTERING ============
+  List<Document> _filterDocuments() {
+    final searchTerm = _searchController.text.toLowerCase();
+    final filteredBySearch = searchTerm.isEmpty
+        ? _documents
+        : _documents.where((doc) {
+            return doc.name.toLowerCase().contains(searchTerm) ||
+                doc.keyword.toLowerCase().contains(searchTerm) ||
+                doc.owner.toLowerCase().contains(searchTerm) ||
+                doc.type.toLowerCase().contains(searchTerm);
+          }).toList();
+
+    // Apply file type filter
+    if (_selectedFileType == 'All') return filteredBySearch;
+
+    return filteredBySearch
+        .where((doc) => doc.type.toUpperCase() == _selectedFileType)
+        .toList();
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {});
+  }
+
+  // ============ DOWNLOAD FUNCTIONALITY ============
   Future<void> _downloadDocument(Document document) async {
     if (!document.allowDownload) {
       _showSnackBar('Download is not allowed for this document', Colors.orange);
@@ -125,26 +167,12 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
 
     try {
       debugPrint(
-        ' Starting download for document: ${document.id} - ${document.name}',
+        'Starting download for document: ${document.id} - ${document.name}',
       );
       final result = await _sharedService.downloadDocument(document.id);
 
-      debugPrint('Download result keys: ${result.keys}');
-      debugPrint('Success: ${result['success']}');
-      debugPrint('Has fileData: ${result.containsKey('fileData')}');
-
-      if (result['success'] == true) {
-        if (!result.containsKey('fileData')) {
-          debugPrint('fileData key missing in response');
-          throw Exception('Server did not return file data');
-        }
+      if (result['success'] == true && result.containsKey('fileData')) {
         final fileData = result['fileData'];
-
-        if (fileData == null) {
-          debugPrint('fileData is null');
-          throw Exception('Server returned null file data');
-        }
-
         List<int> bytesToSave;
 
         if (fileData is List<int>) {
@@ -154,22 +182,14 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
         } else if (fileData is String) {
           bytesToSave = utf8.encode(fileData);
         } else {
-          debugPrint(
-            '❌ fileData is not List<int>, it is: ${fileData.runtimeType}',
-          );
-          throw Exception(
-            'Invalid file data format. Expected List<int>, got ${fileData.runtimeType}',
-          );
+          throw Exception('Invalid file data format');
         }
 
         if (bytesToSave.isEmpty) {
-          throw Exception('Downloaded file data is empty (0 bytes)');
+          throw Exception('Downloaded file data is empty');
         }
 
-        debugPrint('✅ Received ${bytesToSave.length} bytes of file data');
-
         final directory = await getDownloadDirectory();
-
         String filename = result['filename']?.toString() ?? document.name;
 
         if (RegExp(r'^\d+$').hasMatch(filename) && document.name.isNotEmpty) {
@@ -197,15 +217,11 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
         }
 
         final filePath = '${directory.path}/$filename';
-
-        debugPrint('Saving to: $filePath');
-
         final file = File(filePath);
         await file.writeAsBytes(bytesToSave);
 
         if (await file.exists()) {
-          final fileSize = await file.length();
-          debugPrint('File saved: ${fileSize} bytes');
+          final fileSize = await file.length(); // Get file size FIRST
           _showSnackBar('Downloaded: $filename', Colors.green);
 
           if (document.size == '0' ||
@@ -216,7 +232,7 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
               setState(() {
                 _documents[docIndex] = document.copyWith(
                   size: fileSize.toString(),
-                );
+                ); // Use the variable
               });
             }
           }
@@ -231,30 +247,21 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
             final uriToOpen = Platform.isAndroid
                 ? _getFileProviderUri(filePath)
                 : filePath;
-
-            debugPrint('Opening with: $uriToOpen');
-
             final openResult = await OpenFilex.open(uriToOpen);
 
-            if (openResult.type != ResultType.done) {
-              debugPrint('⚠ Could not open file: ${openResult.message}');
-
-              if (Platform.isAndroid) {
-                try {
-                  await OpenFilex.open(filePath);
-                } catch (e) {
-                  debugPrint('⚠ Fallback also failed: $e');
-                }
+            if (openResult.type != ResultType.done && Platform.isAndroid) {
+              try {
+                await OpenFilex.open(filePath);
+              } catch (e) {
+                debugPrint('Fallback also failed: $e');
               }
               _showSnackBar(
                 'File downloaded. Could not open automatically.',
                 Colors.orange,
               );
-            } else {
-              debugPrint('File opened successfully');
             }
           } catch (e) {
-            debugPrint('⚠ Error opening file: $e');
+            debugPrint('Error opening file: $e');
             _showSnackBar(
               'File downloaded. Use a compatible app to open it.',
               Colors.blue,
@@ -264,10 +271,9 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
           throw Exception('Failed to save file to disk');
         }
       } else {
-        final errorMsg =
-            result['error'] ?? result['message'] ?? 'Download failed';
-        debugPrint('Download failed from service: $errorMsg');
-        throw Exception(errorMsg);
+        throw Exception(
+          result['error'] ?? result['message'] ?? 'Download failed',
+        );
       }
     } catch (e) {
       debugPrint('Download error: $e');
@@ -280,9 +286,7 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
   }
 
   Future<Directory> getDownloadDirectory() async {
-    if (Platform.isAndroid) {
-      return await getApplicationDocumentsDirectory();
-    } else if (Platform.isIOS) {
+    if (Platform.isAndroid || Platform.isIOS) {
       return await getApplicationDocumentsDirectory();
     }
     return Directory.current;
@@ -387,7 +391,7 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     }
   }
 
-  // ============ DOCUMENT HANDLING (Same as SharedMeScreen) ============
+  // ============ DOCUMENT HANDLING ============
   void _handleDocumentDoubleTap(Document document) {
     _documentOpener.handleDoubleTap(context: context, document: document);
   }
@@ -454,43 +458,15 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
   }
 
   void _showDocumentVersions(Document document) {
-    // You need to implement this based on your service
     _showSnackBar('Version history not available', Colors.orange);
   }
 
-  // ============ UPDATED DOCUMENT CARD (Same as SharedMeScreen) ============
-  // ============ UPDATED DOCUMENT CARD (Matches Document Library Style) ============
+  // ============ FEATURE 1: COLLAPSIBLE DOCUMENT CARDS ============
   Widget _buildDocumentCard(Document document) {
-    final docIcons = {
-      'PDF': Icons.picture_as_pdf,
-      'DOCX': Icons.description,
-      'XLSX': Icons.table_chart,
-      'PPTX': Icons.slideshow,
-      'TXT': Icons.text_snippet,
-      'XLS': Icons.table_chart,
-      'PPT': Icons.slideshow,
-      'DOC': Icons.description,
-      'IMAGE': Icons.image,
-    };
-
-    final docColors = {
-      'PDF': Colors.red,
-      'DOCX': Colors.blue,
-      'XLSX': Colors.green,
-      'PPTX': Colors.orange,
-      'TXT': Colors.grey,
-      'PPT': Colors.orange,
-      'XLS': Colors.green,
-      'DOC': Colors.blue,
-      'IMAGE': Colors.purple,
-    };
-
-    String fileType = document.type.toUpperCase();
-    IconData icon = docIcons[fileType] ?? Icons.insert_drive_file;
-    Color color = docColors[fileType] ?? Colors.indigo;
-
-    // Format the date to DD MM YYYY
-    String formattedDate = _formatDateDDMMYYYY(document.uploadDate);
+    final iconData = _getFileIconData(document.type);
+    final color = _getFileColor(document.type);
+    final bool isExpanded = _expandedStates[document.id] ?? false;
+    final formattedDate = _formatDateDDMMYYYY(document.uploadDate);
 
     return InkWell(
       onTap: () => _handleDocumentDoubleTap(document),
@@ -504,7 +480,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top row with icon, document info
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -514,25 +489,124 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
                       color: color.withAlpha(10),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(icon, color: color, size: 32),
+                    child: Icon(iconData, color: color, size: 32),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          document.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                document.name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: isExpanded ? 2 : 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _expandedStates[document.id] = !isExpanded;
+                                });
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: isExpanded
+                                      ? color.withAlpha(20)
+                                      : Colors.grey.shade100,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isExpanded
+                                        ? color.withAlpha(100)
+                                        : Colors.transparent,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: AnimatedRotation(
+                                    duration: const Duration(milliseconds: 300),
+                                    turns: isExpanded ? 0.5 : 0,
+                                    child: Icon(
+                                      Icons.keyboard_arrow_down_rounded,
+                                      size: 22,
+                                      color: isExpanded
+                                          ? color
+                                          : Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            PopupMenuButton<String>(
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'details',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline,
+                                        size: 20,
+                                        color: Colors.blue,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text('Details'),
+                                    ],
+                                  ),
+                                ),
+                                if (document.allowDownload)
+                                  PopupMenuItem(
+                                    value: 'download',
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.download,
+                                          size: 20,
+                                          color: Colors.green,
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text('Download'),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                              onSelected: (value) {
+                                if (value == 'details') {
+                                  _showDocumentDetails(document);
+                                } else if (value == 'download') {
+                                  _downloadDocument(document);
+                                }
+                              },
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Icon(
+                                    Icons.more_vert,
+                                    size: 20,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Type: ${document.type}',
+                          'Type: ${document.type} • $formattedDate',
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.grey.shade600,
@@ -543,57 +617,571 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              const Divider(height: 1),
-              const SizedBox(height: 12),
-
-              // Metadata details section
-              if (document.keyword.isNotEmpty)
-                _buildDetailRow('Keyword', document.keyword, Icons.label),
-              _buildDetailRow('Owner', document.owner, Icons.person),
-              _buildDetailRow('Folder', document.folder, Icons.folder),
-              _buildDetailRow(
-                'Classification',
-                document.classification,
-                Icons.security,
-              ),
-              if (document.details.isNotEmpty)
-                _buildDetailRow(
-                  'Details',
-                  document.details,
-                  Icons.info_outline,
+              AnimatedSize(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                child: SizedBox(
+                  height: isExpanded ? null : 0,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 16),
+                      const Divider(height: 1),
+                      const SizedBox(height: 12),
+                      if (document.keyword.isNotEmpty)
+                        _buildDetailRow(
+                          'Keyword',
+                          document.keyword,
+                          Icons.label,
+                        ),
+                      _buildDetailRow('Owner', document.owner, Icons.person),
+                      _buildDetailRow('Folder', document.folder, Icons.folder),
+                      _buildDetailRow(
+                        'Classification',
+                        document.classification,
+                        Icons.security,
+                      ),
+                      if (document.details.isNotEmpty)
+                        _buildDetailRow(
+                          'Details',
+                          document.details,
+                          Icons.info_outline,
+                        ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () =>
+                                  _handleDocumentDoubleTap(document),
+                              icon: const Icon(Icons.visibility, size: 18),
+                              label: const Text('View'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.purple,
+                                side: const BorderSide(color: Colors.purple),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showDocumentVersions(document),
+                              icon: const Icon(Icons.history, size: 18),
+                              label: const Text('Versions'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.blue,
+                                side: const BorderSide(color: Colors.blue),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              const SizedBox(height: 16),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-              // ACTION BUTTONS ROW - Only View and Versions buttons (Download removed)
+  // ============ FEATURE 2: LAYOUT MODES ============
+  Widget _buildLayoutSelector() {
+    return PopupMenuButton<SharedFolderViewMode>(
+      tooltip: 'Change Layout',
+      icon: Icon(
+        _getViewModeIcon(_currentViewMode),
+        color: Colors.indigo,
+        size: 24,
+      ),
+      onSelected: (SharedFolderViewMode mode) {
+        setState(() {
+          _currentViewMode = mode;
+        });
+      },
+      itemBuilder: (context) => <PopupMenuEntry<SharedFolderViewMode>>[
+        PopupMenuItem(
+          value: SharedFolderViewMode.list,
+          child: Row(
+            children: [
+              Icon(Icons.list, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('List View'),
+              if (_currentViewMode == SharedFolderViewMode.list)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: SharedFolderViewMode.grid2x2,
+          child: Row(
+            children: [
+              Icon(Icons.grid_on, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Grid (2x2)'),
+              if (_currentViewMode == SharedFolderViewMode.grid2x2)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: SharedFolderViewMode.grid3x3,
+          child: Row(
+            children: [
+              Icon(Icons.view_module, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Grid (3x3)'),
+              if (_currentViewMode == SharedFolderViewMode.grid3x3)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: SharedFolderViewMode.compact,
+          child: Row(
+            children: [
+              Icon(Icons.view_headline, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Compact View'),
+              if (_currentViewMode == SharedFolderViewMode.compact)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: SharedFolderViewMode.detailed,
+          child: Row(
+            children: [
+              Icon(Icons.table_rows, color: Colors.indigo),
+              SizedBox(width: 8),
+              Text('Detailed View'),
+              if (_currentViewMode == SharedFolderViewMode.detailed)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _getViewModeIcon(SharedFolderViewMode mode) {
+    switch (mode) {
+      case SharedFolderViewMode.list:
+        return Icons.list;
+      case SharedFolderViewMode.grid2x2:
+        return Icons.grid_on;
+      case SharedFolderViewMode.grid3x3:
+        return Icons.view_module;
+      case SharedFolderViewMode.compact:
+        return Icons.view_headline;
+      case SharedFolderViewMode.detailed:
+        return Icons.table_rows;
+    }
+  }
+
+  Widget _buildDocumentsContent(List<Document> documents) {
+    switch (_currentViewMode) {
+      case SharedFolderViewMode.list:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: documents.length,
+          itemBuilder: (context, index) => _buildDocumentCard(documents[index]),
+        );
+      case SharedFolderViewMode.grid2x2:
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 0.9,
+          ),
+          itemCount: documents.length,
+          itemBuilder: (context, index) =>
+              _buildDocumentGridItem(documents[index], 2),
+        );
+      case SharedFolderViewMode.grid3x3:
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 0.85,
+          ),
+          itemCount: documents.length,
+          itemBuilder: (context, index) =>
+              _buildDocumentGridItem(documents[index], 3),
+        );
+      case SharedFolderViewMode.compact:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: documents.length,
+          itemBuilder: (context, index) =>
+              _buildDocumentCompactItem(documents[index]),
+        );
+      case SharedFolderViewMode.detailed:
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: documents.length,
+          itemBuilder: (context, index) =>
+              _buildDocumentDetailedItem(documents[index]),
+        );
+    }
+  }
+
+  Widget _buildDocumentGridItem(Document document, int columns) {
+    final iconData = _getFileIconData(document.type);
+    final color = _getFileColor(document.type);
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _handleDocumentDoubleTap(document),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                padding: EdgeInsets.all(columns == 2 ? 12 : 8),
+                decoration: BoxDecoration(
+                  color: color.withAlpha(20),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  iconData,
+                  color: color,
+                  size: columns == 2 ? 26 : 18,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Flexible(
+                child: Text(
+                  document.name,
+                  style: TextStyle(
+                    fontSize: columns == 2 ? 11 : 9,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: columns == 2 ? 2 : 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                document.type,
+                style: TextStyle(
+                  fontSize: columns == 2 ? 9 : 8,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              if (columns == 2) ...[
+                const SizedBox(height: 2),
+                Text(
+                  _formatDateDDMMYYYY(document.uploadDate),
+                  style: TextStyle(fontSize: 8, color: Colors.grey.shade500),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentCompactItem(Document document) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        elevation: 0.5,
+        child: InkWell(
+          onTap: () => _handleDocumentDoubleTap(document),
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.grey.shade100, width: 1),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _getFileIconData(document.type),
+                  color: _getFileColor(document.type),
+                  size: 18,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    document.name,
+                    style: const TextStyle(fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _formatDateDDMMYYYY(document.uploadDate),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocumentDetailedItem(Document document) {
+    final iconData = _getFileIconData(document.type);
+    final color = _getFileColor(document.type);
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _handleDocumentDoubleTap(document),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // VIEW BUTTON - opens the document
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(20),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(iconData, color: color, size: 24),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _handleDocumentDoubleTap(document),
-                      icon: const Icon(Icons.visibility, size: 18),
-                      label: const Text('View'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.purple,
-                        side: const BorderSide(color: Colors.purple),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          document.name,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.person,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    document.owner,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.folder,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    document.folder,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.calendar_today,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _formatDateDDMMYYYY(document.uploadDate),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.security,
+                                  size: 12,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  document.classification,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'details',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 18,
+                              color: Colors.blue,
+                            ),
+                            SizedBox(width: 6),
+                            const Text(
+                              'Details',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (document.allowDownload)
+                        PopupMenuItem(
+                          value: 'download',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.download,
+                                size: 18,
+                                color: Colors.green,
+                              ),
+                              SizedBox(width: 6),
+                              const Text(
+                                'Download',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                    onSelected: (value) {
+                      if (value == 'details') {
+                        _showDocumentDetails(document);
+                      } else if (value == 'download') {
+                        _downloadDocument(document);
+                      }
+                    },
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.more_vert,
+                        size: 16,
+                        color: Colors.grey,
                       ),
                     ),
                   ),
-
-                  const SizedBox(width: 8),
-
-                  // VERSIONS BUTTON - shows document versions
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _handleDocumentDoubleTap(document),
+                      icon: Icon(
+                        Icons.visibility,
+                        size: 14,
+                        color: Colors.purple,
+                      ),
+                      label: Text(
+                        'View',
+                        style: TextStyle(fontSize: 12, color: Colors.purple),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.purple),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () => _showDocumentVersions(document),
-                      icon: const Icon(Icons.history, size: 18),
-                      label: const Text('Versions'),
+                      icon: Icon(Icons.history, size: 14, color: Colors.blue),
+                      label: Text(
+                        'Versions',
+                        style: TextStyle(fontSize: 12, color: Colors.blue),
+                      ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.blue,
                         side: const BorderSide(color: Colors.blue),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        padding: const EdgeInsets.symmetric(vertical: 6),
                       ),
                     ),
                   ),
@@ -606,121 +1194,79 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     );
   }
 
-  // Helper method to build detail row (for the card above)
-  Widget _buildDetailRow(String label, String value, IconData iconData) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+  // ============ FEATURE 3: FILE TYPE FILTER ============
+  Widget _buildFileTypeFilter() {
+    return PopupMenuButton<String>(
+      tooltip: 'Filter by File Type',
+      icon: Icon(
+        Icons.filter_alt,
+        color: _selectedFileType != 'All' ? Colors.blue : Colors.indigo,
+        size: 24,
+      ),
+      onSelected: (String type) {
+        setState(() {
+          _selectedFileType = type;
+        });
+      },
+      itemBuilder: (context) => _availableFileTypes.map((type) {
+        return PopupMenuItem(
+          value: type,
+          child: Row(
+            children: [
+              if (type == 'All')
+                Icon(Icons.all_inclusive, color: Colors.grey)
+              else
+                Icon(_getFileIconData(type), color: _getFileColor(type)),
+              SizedBox(width: 8),
+              Text(type),
+              if (_selectedFileType == type)
+                Icon(Icons.check, color: Colors.green, size: 16),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildFileTypeBadge() {
+    if (_selectedFileType == 'All') return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.blue.shade200, width: 1),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(iconData, size: 16, color: Colors.grey.shade600),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey.shade700,
-              ),
-            ),
+          Icon(
+            _getFileIconData(_selectedFileType),
+            size: 14,
+            color: _getFileColor(_selectedFileType),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+          const SizedBox(width: 6),
+          Text(
+            _selectedFileType,
+            style: TextStyle(fontSize: 12, color: Colors.blue.shade800),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _selectedFileType = 'All';
+              });
+            },
+            child: Icon(Icons.close, size: 14, color: Colors.blue.shade800),
           ),
         ],
       ),
     );
   }
 
-  // Format date to DD-MM-YYYY - Fixed to handle both YYYY-MM-DD and DD/MM/YYYY formats
-  String _formatDateDDMMYYYY(dynamic date) {
-    try {
-      if (date == null || date.toString().isEmpty) {
-        return 'N/A';
-      }
-
-      final dateStr = date.toString().trim();
-
-      // Check if date is in DD/MM/YYYY format (e.g., "29/10/2025")
-      if (dateStr.contains('/')) {
-        final parts = dateStr.split('/');
-        if (parts.length >= 3) {
-          final day = parts[0].padLeft(2, '0');
-          final month = parts[1].padLeft(2, '0');
-          final year = parts[2];
-          return '$day-$month-$year';
-        }
-      }
-
-      // Check if date is in YYYY-MM-DD format (e.g., "2025-10-29")
-      if (dateStr.contains('-')) {
-        final parts = dateStr.split('-');
-        if (parts.length >= 3) {
-          // If first part is 4 digits, assume YYYY-MM-DD format
-          if (parts[0].length == 4) {
-            final year = parts[0];
-            final month = parts[1].padLeft(2, '0');
-            final day = parts[2].split(' ')[0].padLeft(2, '0');
-            return '$day-$month-$year';
-          } else {
-            // Assume DD-MM-YYYY format
-            final day = parts[0].padLeft(2, '0');
-            final month = parts[1].padLeft(2, '0');
-            final year = parts[2];
-            return '$day-$month-$year';
-          }
-        }
-      }
-
-      // Try to parse as DateTime
-      try {
-        final dateTime = DateTime.parse(dateStr);
-        final day = dateTime.day.toString().padLeft(2, '0');
-        final month = dateTime.month.toString().padLeft(2, '0');
-        final year = dateTime.year.toString();
-        return '$day-$month-$year';
-      } catch (e) {
-        // If parsing fails, return original string
-        return dateStr;
-      }
-    } catch (e) {
-      debugPrint('Error formatting date: $e for input: $date');
-      return date.toString();
-    }
-  }
-
-  void _showDownloadRestrictedPopup(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.download_outlined, size: 48, color: Colors.blue),
-        title: const Text('Download Document'),
-        content: const Text(
-          'For security purposes, library documents require approval for downloading. '
-          'Please reach out to your team administrator or the document owner '
-          'to request download permissions.\n\n'
-          'In the meantime, you can preview the document using the "View" option.',
-          textAlign: TextAlign.center,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Understand'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============ HELPER METHODS ============
+  // ============ SUBFOLDERS ============
   Widget _buildSubfoldersSection() {
     if (_subfolders.isEmpty) return const SizedBox.shrink();
 
@@ -756,9 +1302,8 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _subfolders.length,
-            itemBuilder: (context, index) {
-              return _buildSubfolderCard(_subfolders[index]);
-            },
+            itemBuilder: (context, index) =>
+                _buildSubfolderCard(_subfolders[index]),
           ),
         ],
       ),
@@ -856,84 +1401,248 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     );
   }
 
-  Widget _buildDocumentsSection() {
-    final filteredDocs = _filterDocuments();
-
+  // ============ HELPER METHODS ============
+  Widget _buildDetailRow(String label, String value, IconData iconData) {
     return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.insert_drive_file,
-                color: Colors.indigo,
-                size: 24,
+          Icon(iconData, size: 16, color: Colors.grey.shade600),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade700,
               ),
-              const SizedBox(width: 8),
-              const Text(
-                'Shared Documents',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.indigo.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  filteredDocs.length.toString(),
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16),
-          filteredDocs.isEmpty
-              ? _buildEmptyState()
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: filteredDocs.length,
-                  itemBuilder: (context, index) {
-                    return _buildDocumentCard(filteredDocs[index]);
-                  },
-                ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildDialogDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14),
+              softWrap: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDateDDMMYYYY(dynamic date) {
+    try {
+      if (date == null || date.toString().isEmpty) return 'N/A';
+      final dateStr = date.toString().trim();
+
+      if (dateStr.contains('/')) {
+        final parts = dateStr.split('/');
+        if (parts.length >= 3) {
+          final day = parts[0].padLeft(2, '0');
+          final month = parts[1].padLeft(2, '0');
+          final year = parts[2];
+          return '$day-$month-$year';
+        }
+      }
+
+      if (dateStr.contains('-')) {
+        final parts = dateStr.split('-');
+        if (parts.length >= 3) {
+          if (parts[0].length == 4) {
+            final year = parts[0];
+            final month = parts[1].padLeft(2, '0');
+            final day = parts[2].split(' ')[0].padLeft(2, '0');
+            return '$day-$month-$year';
+          } else {
+            final day = parts[0].padLeft(2, '0');
+            final month = parts[1].padLeft(2, '0');
+            final year = parts[2];
+            return '$day-$month-$year';
+          }
+        }
+      }
+
+      try {
+        final dateTime = DateTime.parse(dateStr);
+        final day = dateTime.day.toString().padLeft(2, '0');
+        final month = dateTime.month.toString().padLeft(2, '0');
+        final year = dateTime.year.toString();
+        return '$day-$month-$year';
+      } catch (e) {
+        return dateStr;
+      }
+    } catch (e) {
+      return date.toString();
+    }
+  }
+
+  String _formatDate(dynamic date) {
+    if (date == null) return 'Unknown';
+    try {
+      final dateStr = date.toString();
+      if (dateStr.contains('T')) {
+        final dateTime = DateTime.parse(dateStr);
+        final now = DateTime.now();
+        final difference = now.difference(dateTime);
+
+        if (difference.inDays == 0) return 'Today';
+        if (difference.inDays == 1) return 'Yesterday';
+        if (difference.inDays < 7) return '${difference.inDays} days ago';
+        return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+      }
+      return dateStr;
+    } catch (e) {
+      return date.toString();
+    }
+  }
+
+  IconData _getFileIconData(String type) {
+    switch (type.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'docx':
+      case 'doc':
+        return Icons.description;
+      case 'xlsx':
+      case 'xls':
+        return Icons.table_chart;
+      case 'pptx':
+      case 'ppt':
+        return Icons.slideshow;
+      case 'image':
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Icons.image;
+      case 'txt':
+        return Icons.text_fields;
+      case 'csv':
+        return Icons.table_chart;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  Color _getFileColor(String type) {
+    switch (type.toLowerCase()) {
+      case 'pdf':
+        return Colors.red;
+      case 'docx':
+      case 'doc':
+        return Colors.blue;
+      case 'xlsx':
+      case 'xls':
+        return Colors.green;
+      case 'pptx':
+      case 'ppt':
+        return Colors.orange;
+      case 'image':
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+        return Colors.purple;
+      case 'txt':
+        return Colors.grey;
+      case 'csv':
+        return Colors.green.shade700;
+      default:
+        return Colors.indigo;
+    }
+  }
+
+  Icon _getFileIcon(String type, double size) {
+    return Icon(_getFileIconData(type), color: _getFileColor(type), size: size);
+  }
+
+  String _formatFileSize(String size) {
+    try {
+      final cleanSize = size.replaceAll(RegExp(r'[^0-9]'), '');
+      final bytes = int.tryParse(cleanSize) ?? 0;
+      if (bytes == 0) return '0 B';
+      if (bytes < 1024) return '$bytes B';
+      if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+      if (bytes < 1024 * 1024 * 1024)
+        return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    } catch (e) {
+      return size;
+    }
+  }
+
+  Widget _buildLoading() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: Colors.indigo),
+          SizedBox(height: 16),
+          Text('Loading shared folder...'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildError() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              _subfolders.isEmpty ? Icons.folder_off : Icons.insert_drive_file,
-              size: 80,
-              color: Colors.grey.shade400,
-            ),
+            Icon(Icons.error_outline, size: 80, color: Colors.red),
             const SizedBox(height: 20),
-            Text(
-              _subfolders.isEmpty ? 'Empty Folder' : 'No Documents',
-              style: const TextStyle(
+            const Text(
+              'Failed to Load',
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey,
+                color: Colors.red,
               ),
             ),
             const SizedBox(height: 10),
             Text(
-              _subfolders.isEmpty
-                  ? 'This shared folder is empty'
-                  : 'No documents shared in this folder',
+              _errorMessage,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _loadSharedFolderContents,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.indigo,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Retry'),
             ),
           ],
         ),
@@ -968,194 +1677,6 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
     );
   }
 
-  Widget _buildLoading() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(color: Colors.indigo),
-          SizedBox(height: 16),
-          Text('Loading shared folder...'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 80, color: Colors.red),
-            const SizedBox(height: 20),
-            Text(
-              'Failed to Load',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.red,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              _errorMessage,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _loadSharedFolderContents,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<Document> _filterDocuments() {
-    final searchTerm = _searchController.text.toLowerCase();
-    if (searchTerm.isEmpty) return _documents;
-
-    return _documents.where((doc) {
-      return doc.name.toLowerCase().contains(searchTerm) ||
-          doc.keyword.toLowerCase().contains(searchTerm) ||
-          doc.owner.toLowerCase().contains(searchTerm) ||
-          doc.type.toLowerCase().contains(searchTerm);
-    }).toList();
-  }
-
-  Widget _buildDialogDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              '$label: ',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 14),
-              softWrap: true,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Icon _getFileIcon(String type, double size) {
-    switch (type.toLowerCase()) {
-      case 'pdf':
-        return Icon(Icons.picture_as_pdf, color: Colors.red, size: size);
-      case 'docx':
-      case 'doc':
-        return Icon(Icons.description, color: Colors.blue, size: size);
-      case 'xlsx':
-      case 'xls':
-        return Icon(Icons.table_chart, color: Colors.green, size: size);
-      case 'pptx':
-      case 'ppt':
-        return Icon(Icons.slideshow, color: Colors.orange, size: size);
-      case 'image':
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-        return Icon(Icons.image, color: Colors.purple, size: size);
-      case 'txt':
-        return Icon(Icons.text_fields, color: Colors.grey, size: size);
-      case 'csv':
-        return Icon(
-          Icons.table_chart,
-          color: Colors.green.shade700,
-          size: size,
-        );
-      default:
-        return Icon(Icons.insert_drive_file, color: Colors.indigo, size: size);
-    }
-  }
-
-  Map<String, dynamic> _getFileInfo(String type) {
-    switch (type.toLowerCase()) {
-      case 'pdf':
-        return {'icon': Icons.picture_as_pdf, 'color': Colors.red};
-      case 'docx':
-      case 'doc':
-        return {'icon': Icons.description, 'color': Colors.blue};
-      case 'xlsx':
-      case 'xls':
-        return {'icon': Icons.table_chart, 'color': Colors.green};
-      case 'pptx':
-      case 'ppt':
-        return {'icon': Icons.slideshow, 'color': Colors.orange};
-      case 'image':
-      case 'jpg':
-      case 'jpeg':
-      case 'png':
-        return {'icon': Icons.image, 'color': Colors.purple};
-      case 'txt':
-        return {'icon': Icons.text_fields, 'color': Colors.grey};
-      case 'csv':
-        return {'icon': Icons.table_chart, 'color': Colors.green.shade700};
-      default:
-        return {'icon': Icons.insert_drive_file, 'color': Colors.indigo};
-    }
-  }
-
-  String _formatFileSize(String size) {
-    try {
-      final cleanSize = size.replaceAll(RegExp(r'[^0-9]'), '');
-      final bytes = int.tryParse(cleanSize) ?? 0;
-      if (bytes == 0) return '0 B';
-      if (bytes < 1024) return '$bytes B';
-      if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
-      if (bytes < 1024 * 1024 * 1024) {
-        return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-      }
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-    } catch (e) {
-      debugPrint('Error formatting file size: $e for input: $size');
-      return size;
-    }
-  }
-
-  String _formatDate(dynamic date) {
-    if (date == null) return 'Unknown';
-    try {
-      final dateStr = date.toString();
-      if (dateStr.contains('T')) {
-        final dateTime = DateTime.parse(dateStr);
-        final now = DateTime.now();
-        final difference = now.difference(dateTime);
-
-        if (difference.inDays == 0) {
-          return 'Today';
-        } else if (difference.inDays == 1) {
-          return 'Yesterday';
-        } else if (difference.inDays < 7) {
-          return '${difference.inDays} days ago';
-        } else {
-          return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-        }
-      }
-      return dateStr;
-    } catch (e) {
-      return date.toString();
-    }
-  }
-
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1168,6 +1689,8 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final filteredDocs = _filterDocuments();
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -1204,36 +1727,88 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
       ),
       body: Column(
         children: [
-          // Search bar
+          // Search and filters section
           Container(
             padding: const EdgeInsets.all(16),
             color: Colors.grey.shade100,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (value) => setState(() {}),
-              decoration: InputDecoration(
-                hintText: 'Search in shared folder...',
-                prefixIcon: const Icon(Icons.search, color: Colors.indigo),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, color: Colors.grey),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withAlpha(10),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (value) => setState(() {}),
+                          decoration: InputDecoration(
+                            hintText: 'Search in shared folder...',
+                            hintStyle: TextStyle(color: Colors.grey.shade600),
+                            prefixIcon: const Icon(
+                              Icons.search,
+                              color: Colors.indigo,
+                            ),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(
+                                      Icons.clear,
+                                      color: Colors.grey,
+                                    ),
+                                    onPressed: _clearSearch,
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _buildFileTypeFilter(),
+                    const SizedBox(width: 8),
+                    _buildLayoutSelector(),
+                  ],
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Text(
+                      '${filteredDocs.length} document${filteredDocs.length == 1 ? '' : 's'}',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    _buildFileTypeBadge(),
+                    const Spacer(),
+                    if (_subfolders.isNotEmpty)
+                      Text(
+                        '${_subfolders.length} folder${_subfolders.length == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 13,
+                        ),
+                      ),
+                  ],
                 ),
-              ),
+              ],
             ),
           ),
 
@@ -1251,13 +1826,91 @@ class _SharedFolderScreenState extends State<SharedFolderScreen> {
                         children: [
                           if (_isDownloading) _buildDownloadingBanner(),
                           _buildSubfoldersSection(),
-                          _buildDocumentsSection(),
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.insert_drive_file,
+                                      color: Colors.indigo,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Text(
+                                      'Shared Documents',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.indigo.shade100,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        filteredDocs.length.toString(),
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                filteredDocs.isEmpty
+                                    ? _buildEmptyState()
+                                    : _buildDocumentsContent(filteredDocs),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _subfolders.isEmpty ? Icons.folder_off : Icons.insert_drive_file,
+              size: 80,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              _subfolders.isEmpty ? 'Empty Folder' : 'No Documents',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _subfolders.isEmpty
+                  ? 'This shared folder is empty'
+                  : 'No documents shared in this folder',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

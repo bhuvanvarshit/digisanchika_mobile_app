@@ -1,10 +1,10 @@
 // presentations/Screens/document_library.dart
 
+// ignore_for_file: unused_import
+
 import 'dart:io';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:digi_sanchika/models/document.dart';
 import 'package:digi_sanchika/local_storage.dart';
@@ -30,7 +30,7 @@ class _DocumentLibraryState extends State<DocumentLibrary>
   String _selectedFilter = 'All';
   List<Document> _publicDocuments = [];
   List<Document> _filteredDocuments = [];
-  bool _isDownloading = false;
+  final bool _isDownloading = false;
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';

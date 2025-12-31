@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:file_picker/file_picker.dart';
+// import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:digi_sanchika/local_storage.dart';
 import 'package:digi_sanchika/models/document.dart';
